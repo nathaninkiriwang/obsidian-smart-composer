@@ -24,6 +24,10 @@ import {
   LLMBaseUrlNotSetException,
 } from '../../core/llm/exception'
 import { getChatModelClient } from '../../core/llm/manager'
+import { PdfAnalyzer } from '../../core/pdf/pdfAnalyzer'
+import { PdfExtractor } from '../../core/pdf/pdfExtractor'
+import { PdfToolProvider } from '../../core/pdf/pdfToolProvider'
+import { usePlugin } from '../../contexts/plugin-context'
 import { useChatHistory } from '../../hooks/useChatHistory'
 import {
   AssistantToolMessageGroup,
@@ -34,7 +38,7 @@ import {
 import {
   MentionableBlock,
   MentionableBlockData,
-  MentionableCurrentFile,
+  MentionablePdf,
 } from '../../types/mentionable'
 import { ToolCallResponseStatus } from '../../types/tool-call.types'
 import { applyChangesToFile } from '../../utils/chat/apply'
@@ -58,18 +62,13 @@ import { useChatStreamManager } from './useChatStreamManager'
 import UserMessageItem from './UserMessageItem'
 
 // Add an empty line here
-const getNewInputMessage = (app: App): ChatUserMessage => {
+const getNewInputMessage = (): ChatUserMessage => {
   return {
     role: 'user',
     content: null,
     promptContent: null,
     id: uuidv4(),
-    mentionables: [
-      {
-        type: 'current-file',
-        file: app.workspace.getActiveFile(),
-      },
-    ],
+    mentionables: [],
   }
 }
 
@@ -85,6 +84,7 @@ export type ChatProps = {
 
 const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
   const app = useApp()
+  const plugin = usePlugin()
   const { settings, setSettings } = useSettings()
   const { getRAGEngine } = useRAG()
   const { getMcpManager } = useMcp()
@@ -100,8 +100,29 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
     return new PromptGenerator(getRAGEngine, app, settings)
   }, [getRAGEngine, app, settings])
 
+  // Initialize PDF extraction pipeline
+  useMemo(() => {
+    const extractor = new PdfExtractor()
+    const analyzer = new PdfAnalyzer(() => {
+      // Use dedicated extraction model if configured, otherwise fall back to chat model
+      const modelId =
+        settings.zotero.pdfExtractionModelId || settings.chatModelId
+      return getChatModelClient({
+        modelId,
+        settings,
+        setSettings,
+      })
+    }, extractor)
+    const pdfToolProvider = new PdfToolProvider(
+      extractor,
+      analyzer,
+      app.vault,
+    )
+    promptGenerator.setPdfToolProvider(pdfToolProvider)
+  }, [promptGenerator, settings, setSettings, app.vault])
+
   const [inputMessage, setInputMessage] = useState<ChatUserMessage>(() => {
-    const newMessage = getNewInputMessage(app)
+    const newMessage = getNewInputMessage()
     if (props.selectedBlock) {
       newMessage.mentionables = [
         ...newMessage.mentionables,
@@ -169,7 +190,7 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
       }
       setCurrentConversationId(conversationId)
       setChatMessages(conversation)
-      const newInputMessage = getNewInputMessage(app)
+      const newInputMessage = getNewInputMessage()
       setInputMessage(newInputMessage)
       setFocusedMessageId(newInputMessage.id)
       setQueryProgress({
@@ -184,7 +205,8 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
   const handleNewChat = (selectedBlock?: MentionableBlockData) => {
     setCurrentConversationId(uuidv4())
     setChatMessages([])
-    const newInputMessage = getNewInputMessage(app)
+    plugin.paperSelection.clear()
+    const newInputMessage = getNewInputMessage()
     if (selectedBlock) {
       const mentionableBlock: MentionableBlock = {
         type: 'block',
@@ -447,53 +469,76 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
     updateConversationAsync()
   }, [currentConversationId, chatMessages, createOrUpdateConversation])
 
-  // Updates the currentFile of the focused message (input or chat history)
-  // This happens when active file changes or focused message changes
-  const handleActiveLeafChange = useCallback(() => {
-    const activeFile = app.workspace.getActiveFile()
-    if (!activeFile) return
 
-    const mentionable: Omit<MentionableCurrentFile, 'id'> = {
-      type: 'current-file',
-      file: activeFile,
-    }
-
-    if (!focusedMessageId) return
-    if (inputMessage.id === focusedMessageId) {
-      setInputMessage((prevInputMessage) => ({
-        ...prevInputMessage,
-        mentionables: [
-          mentionable,
-          ...prevInputMessage.mentionables.filter(
-            (mentionable) => mentionable.type !== 'current-file',
-          ),
-        ],
-      }))
-    } else {
-      setChatMessages((prevChatHistory) =>
-        prevChatHistory.map((message) =>
-          message.id === focusedMessageId && message.role === 'user'
-            ? {
-                ...message,
-                mentionables: [
-                  mentionable,
-                  ...message.mentionables.filter(
-                    (mentionable) => mentionable.type !== 'current-file',
-                  ),
-                ],
-              }
-            : message,
-        ),
-      )
-    }
-  }, [app.workspace, focusedMessageId, inputMessage.id])
-
+  // Sync paper selection store → chat mentionables (Library → Chat)
   useEffect(() => {
-    app.workspace.on('active-leaf-change', handleActiveLeafChange)
-    return () => {
-      app.workspace.off('active-leaf-change', handleActiveLeafChange)
-    }
-  }, [app.workspace, handleActiveLeafChange])
+    const store = plugin.paperSelection
+    const unsubscribe = store.subscribe(() => {
+      const selected = store.getSelected()
+      const selectedKeys = new Set(selected.map((p) => p.zoteroKey))
+
+      setInputMessage((prev) => {
+        // Remove PDF mentionables that are no longer selected
+        const nonPdfMentionables = prev.mentionables.filter(
+          (m) => m.type !== 'pdf',
+        )
+        const existingPdfKeys = new Set(
+          prev.mentionables
+            .filter((m): m is MentionablePdf => m.type === 'pdf')
+            .map((m) => m.zoteroKey),
+        )
+
+        // Add newly selected papers
+        const newPdfMentionables = selected
+          .filter((p) => !existingPdfKeys.has(p.zoteroKey) && p.pdfPath)
+          .map((p): MentionablePdf | null => {
+            const file = app.vault.getFileByPath(p.pdfPath)
+            if (!file) return null
+            const firstAuthor = p.authors[0]
+              ? p.authors[0].split(',')[0].split(' ').pop() ?? ''
+              : ''
+            return {
+              type: 'pdf',
+              file,
+              title: p.title,
+              zoteroKey: p.zoteroKey,
+              firstAuthor,
+              year: p.year,
+            }
+          })
+          .filter((m): m is MentionablePdf => m !== null)
+
+        // Keep existing PDFs that are still selected
+        const keptPdfMentionables = prev.mentionables.filter(
+          (m): m is MentionablePdf =>
+            m.type === 'pdf' && selectedKeys.has(m.zoteroKey),
+        )
+
+        const updatedMentionables = [
+          ...nonPdfMentionables,
+          ...keptPdfMentionables,
+          ...newPdfMentionables,
+        ]
+
+        // Avoid unnecessary state updates
+        if (updatedMentionables.length === prev.mentionables.length) {
+          const prevKeys = prev.mentionables
+            .map((m) => getMentionableKey(serializeMentionable(m)))
+            .sort()
+            .join(',')
+          const newKeys = updatedMentionables
+            .map((m) => getMentionableKey(serializeMentionable(m)))
+            .sort()
+            .join(',')
+          if (prevKeys === newKeys) return prev
+        }
+
+        return { ...prev, mentionables: updatedMentionables }
+      })
+    })
+
+    return unsubscribe
+  }, [plugin.paperSelection, app.vault])
 
   useImperativeHandle(ref, () => ({
     openNewChat: (selectedBlock?: MentionableBlockData) =>
@@ -716,7 +761,7 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
             inputChatMessages: [...chatMessages, { ...inputMessage, content }],
             useVaultSearch,
           })
-          setInputMessage(getNewInputMessage(app))
+          setInputMessage(getNewInputMessage())
         }}
         onFocus={() => {
           setFocusedMessageId(inputMessage.id)

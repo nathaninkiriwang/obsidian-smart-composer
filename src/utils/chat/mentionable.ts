@@ -45,6 +45,15 @@ export const serializeMentionable = (
         mimeType: mentionable.mimeType,
         data: mentionable.data,
       }
+    case 'pdf':
+      return {
+        type: 'pdf',
+        file: mentionable.file.path,
+        title: mentionable.title,
+        zoteroKey: mentionable.zoteroKey,
+        firstAuthor: mentionable.firstAuthor,
+        year: mentionable.year,
+      }
   }
 }
 
@@ -118,6 +127,20 @@ export const deserializeMentionable = (
           data: mentionable.data,
         }
       }
+      case 'pdf': {
+        const file = app.vault.getFileByPath(mentionable.file)
+        if (!file) {
+          return null
+        }
+        return {
+          type: 'pdf',
+          file: file,
+          title: mentionable.title,
+          zoteroKey: mentionable.zoteroKey,
+          firstAuthor: mentionable.firstAuthor,
+          year: mentionable.year,
+        }
+      }
     }
   } catch (e) {
     console.error('Error deserializing mentionable', e)
@@ -141,6 +164,8 @@ export function getMentionableKey(mentionable: SerializedMentionable): string {
       return `url:${mentionable.url}`
     case 'image':
       return `image:${mentionable.name}:${mentionable.data.length}:${mentionable.data.slice(-32)}`
+    case 'pdf':
+      return `pdf:${mentionable.zoteroKey}`
   }
 }
 
@@ -160,5 +185,9 @@ export function getMentionableName(mentionable: Mentionable): string {
       return mentionable.url
     case 'image':
       return mentionable.name
+    case 'pdf':
+      return mentionable.firstAuthor
+        ? `${mentionable.firstAuthor} et al.`
+        : mentionable.title
   }
 }

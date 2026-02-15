@@ -13,8 +13,13 @@ import { LexicalEditor, SerializedEditorState } from 'lexical'
 import { RefObject, useCallback, useEffect } from 'react'
 
 import { useApp } from '../../../contexts/app-context'
+import { usePlugin } from '../../../contexts/plugin-context'
 import { MentionableImage } from '../../../types/mentionable'
-import { fuzzySearch } from '../../../utils/fuzzy-search'
+import {
+  SearchableMentionable,
+  fuzzySearch,
+  fuzzySearchPdfs,
+} from '../../../utils/fuzzy-search'
 
 import DragDropPaste from './plugins/image/DragDropPastePlugin'
 import ImagePastePlugin from './plugins/image/ImagePastePlugin'
@@ -62,6 +67,7 @@ export default function LexicalContentEditable({
   plugins,
 }: LexicalContentEditableProps) {
   const app = useApp()
+  const plugin = usePlugin()
 
   const initialConfig: InitialConfigType = {
     namespace: 'LexicalContentEditable',
@@ -77,8 +83,15 @@ export default function LexicalContentEditable({
   }
 
   const searchResultByQuery = useCallback(
-    (query: string) => fuzzySearch(app, query),
-    [app],
+    (query: string): SearchableMentionable[] => {
+      // When Zotero papers are available, show only PDF results
+      const availablePapers = plugin.paperSelection.getAvailablePapers()
+      if (availablePapers.length > 0) {
+        return fuzzySearchPdfs(availablePapers, query, app)
+      }
+      return fuzzySearch(app, query)
+    },
+    [app, plugin.paperSelection],
   )
 
   /*

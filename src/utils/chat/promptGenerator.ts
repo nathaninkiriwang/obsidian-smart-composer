@@ -1,7 +1,8 @@
-import { App, TFile, htmlToMarkdown, requestUrl } from 'obsidian'
+import { App, TFile, Vault, htmlToMarkdown, requestUrl } from 'obsidian'
 
 import { editorStateToPlainText } from '../../components/chat-view/chat-input/utils/editor-state-to-plain-text'
 import { QueryProgressState } from '../../components/chat-view/QueryProgress'
+import { PdfToolProvider } from '../../core/pdf/pdfToolProvider'
 import { RAGEngine } from '../../core/rag/ragEngine'
 import { SelectEmbedding } from '../../database/schema'
 import { SmartComposerSettings } from '../../settings/schema/setting.types'
@@ -17,6 +18,7 @@ import {
   MentionableFile,
   MentionableFolder,
   MentionableImage,
+  MentionablePdf,
   MentionableUrl,
   MentionableVault,
 } from '../../types/mentionable'
@@ -36,6 +38,7 @@ export class PromptGenerator {
   private app: App
   private settings: SmartComposerSettings
   private MAX_CONTEXT_MESSAGES = 20
+  pdfToolProvider: PdfToolProvider | null = null
 
   constructor(
     getRagEngine: () => Promise<RAGEngine>,
@@ -47,11 +50,18 @@ export class PromptGenerator {
     this.settings = settings
   }
 
+  setPdfToolProvider(provider: PdfToolProvider): void {
+    this.pdfToolProvider = provider
+  }
+
   public async generateRequestMessages({
     messages,
   }: {
     messages: ChatMessage[]
-  }): Promise<RequestMessage[]> {
+  }): Promise<{
+    requestMessages: RequestMessage[]
+    pdfTools?: import('../../types/llm/request').RequestTool[]
+  }> {
     if (messages.length === 0) {
       throw new Error('No messages provided')
     }
@@ -100,8 +110,35 @@ export class PromptGenerator {
         ? await this.getCurrentFileMessage(currentFile)
         : undefined
 
+    // Collect all PDF mentionables across all messages
+    const pdfMentionables = compiledMessages
+      .filter((m): m is ChatUserMessage => m.role === 'user')
+      .flatMap((m) => m.mentionables)
+      .filter((m): m is MentionablePdf => m.type === 'pdf')
+
+    // Deduplicate by zoteroKey
+    const uniquePdfs = Array.from(
+      new Map(pdfMentionables.map((p) => [p.zoteroKey, p])).values(),
+    )
+
+    // Prepare PDF tools if any PDF mentionables exist
+    let pdfSystemMessage: RequestMessage | null = null
+    let pdfTools: import('../../types/llm/request').RequestTool[] | undefined
+    if (uniquePdfs.length > 0 && this.pdfToolProvider) {
+      const { tools, systemMessage: pdfMsg } =
+        await this.pdfToolProvider.preparePdfTools(uniquePdfs)
+      if (tools.length > 0) {
+        pdfTools = tools
+        pdfSystemMessage = {
+          role: 'system',
+          content: pdfMsg,
+        }
+      }
+    }
+
     const requestMessages: RequestMessage[] = [
       systemMessage,
+      ...(pdfSystemMessage ? [pdfSystemMessage] : []),
       ...(customInstructionMessage ? [customInstructionMessage] : []),
       ...(currentFileMessage ? [currentFileMessage] : []),
       ...this.getChatHistoryMessages({ messages: compiledMessages }),
@@ -110,7 +147,7 @@ export class PromptGenerator {
         : []),
     ]
 
-    return requestMessages
+    return { requestMessages, pdfTools }
   }
 
   private getChatHistoryMessages({

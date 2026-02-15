@@ -4,6 +4,9 @@ import { LLMProvider, LLMProviderType } from './types/provider.types'
 
 export const CHAT_VIEW_TYPE = 'smtcmp-chat-view'
 export const APPLY_VIEW_TYPE = 'smtcmp-apply-view'
+export const LIBRARY_VIEW_TYPE = 'smtcmp-library-view'
+
+export const ZOTERO_DEFAULT_API_BASE_URL = 'http://localhost:23119'
 
 export const PGLITE_DB_PATH = '.smtcmp_vector_db.tar.gz'
 

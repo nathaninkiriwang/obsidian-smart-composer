@@ -11,9 +11,11 @@ import {
 } from 'react'
 
 import { useApp } from '../../../contexts/app-context'
+import { usePlugin } from '../../../contexts/plugin-context'
 import {
   Mentionable,
   MentionableImage,
+  MentionablePdf,
   SerializedMentionable,
 } from '../../../types/mentionable'
 import {
@@ -32,7 +34,6 @@ import { ModelSelect } from './ModelSelect'
 import { MentionNode } from './plugins/mention/MentionNode'
 import { NodeMutations } from './plugins/on-mutation/OnMutationPlugin'
 import { SubmitButton } from './SubmitButton'
-import ToolBadge from './ToolBadge'
 import { VaultChatButton } from './VaultChatButton'
 
 export type ChatUserInputRef = {
@@ -65,6 +66,7 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
     ref,
   ) => {
     const app = useApp()
+    const plugin = usePlugin()
 
     const editorRef = useRef<LexicalEditor | null>(null)
     const contentEditableRef = useRef<HTMLDivElement>(null)
@@ -144,6 +146,24 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
           getMentionableKey(addedMentionables[addedMentionables.length - 1]),
         )
       }
+
+      // Sync PDF mentions to paper selection store (Chat → Library)
+      const store = plugin.paperSelection
+      const availablePapers = store.getAvailablePapers()
+      for (const added of addedMentionables) {
+        if (added.type === 'pdf') {
+          const paper = availablePapers.find(
+            (p) => p.zoteroKey === added.zoteroKey,
+          )
+          if (paper) store.addPaper(paper)
+        }
+      }
+      for (const key of destroyedMentionableKeys) {
+        if (key.startsWith('pdf:')) {
+          const zoteroKey = key.slice(4)
+          store.removePaper(zoteroKey)
+        }
+      }
     }
 
     const handleCreateImageMentionables = useCallback(
@@ -186,6 +206,11 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
           }
         })
       })
+
+      // Sync PDF deletion to paper selection store
+      if (mentionable.type === 'pdf') {
+        plugin.paperSelection.removePaper(mentionable.zoteroKey)
+      }
     }
 
     const handleUploadImages = async (images: File[]) => {
@@ -200,89 +225,101 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
       content && onSubmit(content, options.useVaultSearch)
     }
 
+    const pdfMentionables = mentionables.filter((m) => m.type === 'pdf')
+    const otherMentionables = mentionables.filter((m) => m.type !== 'pdf')
+
+    const renderBadge = (m: (typeof mentionables)[number]) => (
+      <MentionableBadge
+        key={getMentionableKey(serializeMentionable(m))}
+        mentionable={m}
+        onDelete={() => handleMentionableDelete(m)}
+        onClick={() => {
+          const mentionableKey = getMentionableKey(
+            serializeMentionable(m),
+          )
+          if (
+            (m.type === 'current-file' ||
+              m.type === 'file' ||
+              m.type === 'block') &&
+            m.file &&
+            mentionableKey === displayedMentionableKey
+          ) {
+            openMarkdownFile(
+              app,
+              m.file.path,
+              m.type === 'block' ? m.startLine : undefined,
+            )
+          } else {
+            setDisplayedMentionableKey(mentionableKey)
+          }
+        }}
+        isFocused={
+          getMentionableKey(serializeMentionable(m)) ===
+          displayedMentionableKey
+        }
+      />
+    )
+
     return (
-      <div className="smtcmp-chat-user-input-container" ref={containerRef}>
-        <div className="smtcmp-chat-user-input-files">
-          <ToolBadge />
-          {mentionables.map((m) => (
-            <MentionableBadge
-              key={getMentionableKey(serializeMentionable(m))}
-              mentionable={m}
-              onDelete={() => handleMentionableDelete(m)}
-              onClick={() => {
-                const mentionableKey = getMentionableKey(
-                  serializeMentionable(m),
-                )
-                if (
-                  (m.type === 'current-file' ||
-                    m.type === 'file' ||
-                    m.type === 'block') &&
-                  m.file &&
-                  mentionableKey === displayedMentionableKey
-                ) {
-                  // open file on click again
-                  openMarkdownFile(
-                    app,
-                    m.file.path,
-                    m.type === 'block' ? m.startLine : undefined,
-                  )
-                } else {
-                  setDisplayedMentionableKey(mentionableKey)
-                }
-              }}
-              isFocused={
-                getMentionableKey(serializeMentionable(m)) ===
-                displayedMentionableKey
-              }
-            />
-          ))}
-        </div>
-
-        <MentionableContentPreview
-          displayedMentionableKey={displayedMentionableKey}
-          mentionables={mentionables}
-        />
-
-        <LexicalContentEditable
-          initialEditorState={(editor) => {
-            if (initialSerializedEditorState) {
-              editor.setEditorState(
-                editor.parseEditorState(initialSerializedEditorState),
-              )
-            }
-          }}
-          editorRef={editorRef}
-          contentEditableRef={contentEditableRef}
-          onChange={onChange}
-          onEnter={() => handleSubmit({ useVaultSearch: false })}
-          onFocus={onFocus}
-          onMentionNodeMutation={handleMentionNodeMutation}
-          onCreateImageMentionables={handleCreateImageMentionables}
-          autoFocus={autoFocus}
-          plugins={{
-            onEnter: {
-              onVaultChat: () => {
-                handleSubmit({ useVaultSearch: true })
-              },
-            },
-            templatePopover: {
-              anchorElement: containerRef.current,
-            },
-          }}
-        />
-
-        <div className="smtcmp-chat-user-input-controls">
-          <div className="smtcmp-chat-user-input-controls__model-select-container">
-            <ModelSelect />
+      <div className="smtcmp-chat-user-input-outer">
+        {pdfMentionables.length > 0 && (
+          <div className="smtcmp-chat-user-input-pdf-badges">
+            {pdfMentionables.map(renderBadge)}
           </div>
-          <div className="smtcmp-chat-user-input-controls__buttons">
-            <ImageUploadButton onUpload={handleUploadImages} />
-            <SubmitButton onClick={() => handleSubmit()} />
-            <VaultChatButton
-              onClick={() => {
-                handleSubmit({ useVaultSearch: true })
-              }}
-            />
+        )}
+        <div className="smtcmp-chat-user-input-container" ref={containerRef}>
+          {otherMentionables.length > 0 && (
+            <div className="smtcmp-chat-user-input-files">
+              {otherMentionables.map(renderBadge)}
+            </div>
+          )}
+
+          <MentionableContentPreview
+            displayedMentionableKey={displayedMentionableKey}
+            mentionables={mentionables}
+          />
+
+          <LexicalContentEditable
+            initialEditorState={(editor) => {
+              if (initialSerializedEditorState) {
+                editor.setEditorState(
+                  editor.parseEditorState(initialSerializedEditorState),
+                )
+              }
+            }}
+            editorRef={editorRef}
+            contentEditableRef={contentEditableRef}
+            onChange={onChange}
+            onEnter={() => handleSubmit({ useVaultSearch: false })}
+            onFocus={onFocus}
+            onMentionNodeMutation={handleMentionNodeMutation}
+            onCreateImageMentionables={handleCreateImageMentionables}
+            autoFocus={autoFocus}
+            plugins={{
+              onEnter: {
+                onVaultChat: () => {
+                  handleSubmit({ useVaultSearch: true })
+                },
+              },
+              templatePopover: {
+                anchorElement: containerRef.current,
+              },
+            }}
+          />
+
+          <div className="smtcmp-chat-user-input-controls">
+            <div className="smtcmp-chat-user-input-controls__model-select-container">
+              <ModelSelect />
+            </div>
+            <div className="smtcmp-chat-user-input-controls__buttons">
+              <ImageUploadButton onUpload={handleUploadImages} />
+              <SubmitButton onClick={() => handleSubmit()} />
+              <VaultChatButton
+                onClick={() => {
+                  handleSubmit({ useVaultSearch: true })
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

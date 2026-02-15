@@ -6,6 +6,7 @@ import {
   DEFAULT_CHAT_MODEL_ID,
   DEFAULT_EMBEDDING_MODELS,
   DEFAULT_PROVIDERS,
+  ZOTERO_DEFAULT_API_BASE_URL,
 } from '../../constants'
 import { chatModelSchema } from '../../types/chat-model.types'
 import { embeddingModelSchema } from '../../types/embedding-model.types'
@@ -86,6 +87,23 @@ export const smartComposerSettingsSchema = z.object({
       includeCurrentFileContent: true,
       enableTools: true,
       maxAutoIterations: 1,
+    }),
+
+  // Zotero options
+  zotero: z
+    .object({
+      apiBaseUrl: z.string(),
+      zoteroStoragePath: z.string(),
+      libraryVaultPath: z.string(),
+      selectedCollection: z.string(),
+      pdfExtractionModelId: z.string(),
+    })
+    .catch({
+      apiBaseUrl: ZOTERO_DEFAULT_API_BASE_URL,
+      zoteroStoragePath: '',
+      libraryVaultPath: 'Library',
+      selectedCollection: '',
+      pdfExtractionModelId: '',
     }),
 })
 export type SmartComposerSettings = z.infer<typeof smartComposerSettingsSchema>

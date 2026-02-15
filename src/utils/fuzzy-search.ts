@@ -4,8 +4,10 @@ import { App, TFile, TFolder } from 'obsidian'
 import {
   MentionableFile,
   MentionableFolder,
+  MentionablePdf,
   MentionableVault,
 } from '../types/mentionable'
+import { PaperMetadata } from '../types/zotero.types'
 
 import { calculateFileDistance, getOpenFiles } from './obsidian'
 
@@ -13,6 +15,7 @@ export type SearchableMentionable =
   | MentionableFile
   | MentionableFolder
   | MentionableVault
+  | MentionablePdf
 
 type VaultSearchItem = {
   type: 'vault'
@@ -204,4 +207,62 @@ function searchItemToMentionable(item: SearchItem): SearchableMentionable {
         type: 'vault',
       }
   }
+}
+
+type PdfSearchItem = {
+  title: string
+  authors: string
+  paper: PaperMetadata
+}
+
+export function fuzzySearchPdfs(
+  papers: PaperMetadata[],
+  query: string,
+  app: App,
+): MentionablePdf[] {
+  const searchItems: PdfSearchItem[] = papers.map((paper) => ({
+    title: paper.title,
+    authors: paper.authors.join(', '),
+    paper,
+  }))
+
+  const resolveFile = (pdfPath: string): TFile | null => {
+    if (!pdfPath) return null
+    const file = app.vault.getFileByPath(pdfPath)
+    return file instanceof TFile ? file : null
+  }
+
+  const toMentionablePdf = (item: PdfSearchItem): MentionablePdf | null => {
+    const file = resolveFile(item.paper.pdfPath)
+    if (!file) return null
+    const firstAuthor = item.paper.authors[0]
+      ? item.paper.authors[0].split(',')[0].split(' ').pop() ?? ''
+      : ''
+    return {
+      type: 'pdf',
+      file,
+      title: item.paper.title,
+      zoteroKey: item.paper.zoteroKey,
+      firstAuthor,
+      year: item.paper.year,
+    }
+  }
+
+  if (!query) {
+    return searchItems
+      .slice(0, 20)
+      .map(toMentionablePdf)
+      .filter((m): m is MentionablePdf => m !== null)
+  }
+
+  const results = fuzzysort.go(query, searchItems, {
+    keys: ['title', 'authors'],
+    threshold: 0.2,
+    limit: 20,
+    all: true,
+  })
+
+  return results
+    .map((result) => toMentionablePdf(result.obj))
+    .filter((m): m is MentionablePdf => m !== null)
 }

@@ -103,6 +103,7 @@ function getPossibleQueryMatch(text: string): MenuTextMatch | null {
 
 class MentionTypeaheadOption extends MenuOption {
   name: string
+  subtitle?: string
   mentionable: Mentionable
   icon: React.ReactNode
 
@@ -121,6 +122,11 @@ class MentionTypeaheadOption extends MenuOption {
       case 'vault':
         super('vault')
         this.name = 'Vault'
+        this.mentionable = result
+        break
+      case 'pdf':
+        super(`pdf:${result.zoteroKey}`)
+        this.name = result.title
         this.mentionable = result
         break
     }
@@ -163,6 +169,11 @@ function MentionsTypeaheadMenuItem({
       {option.mentionable.type === 'folder' && (
         <span className="text smtcmp-mention-popover-folder-path">
           {option.mentionable.folder.path}
+        </span>
+      )}
+      {option.mentionable.type === 'pdf' && option.subtitle && (
+        <span className="text smtcmp-mention-popover-folder-path">
+          {option.subtitle}
         </span>
       )}
     </li>

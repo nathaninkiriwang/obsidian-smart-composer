@@ -1,12 +1,16 @@
-import { Editor, MarkdownView, Notice, Plugin } from 'obsidian'
+import { Editor, MarkdownView, Notice, Platform, Plugin } from 'obsidian'
 
 import { ApplyView } from './ApplyView'
 import { ChatView } from './ChatView'
+import { LibraryView } from './LibraryView'
 import { ChatProps } from './components/chat-view/Chat'
 import { InstallerUpdateRequiredModal } from './components/modals/InstallerUpdateRequiredModal'
-import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE } from './constants'
+import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE, LIBRARY_VIEW_TYPE } from './constants'
 import { McpManager } from './core/mcp/mcpManager'
+import { PaperSelectionStore } from './core/paper-selection/store'
 import { RAGEngine } from './core/rag/ragEngine'
+import { ZoteroClient } from './core/zotero/zoteroClient'
+import { ZoteroSync } from './core/zotero/zoteroSync'
 import { DatabaseManager } from './database/DatabaseManager'
 import { PGLiteAbortedException } from './database/exception'
 import { migrateToJsonDatabase } from './database/json/migrateToJsonDatabase'
@@ -25,6 +29,9 @@ export default class SmartComposerPlugin extends Plugin {
   mcpManager: McpManager | null = null
   dbManager: DatabaseManager | null = null
   ragEngine: RAGEngine | null = null
+  zoteroClient: ZoteroClient | null = null
+  zoteroSync: ZoteroSync | null = null
+  paperSelection: PaperSelectionStore = new PaperSelectionStore()
   private dbManagerInitPromise: Promise<DatabaseManager> | null = null
   private ragEngineInitPromise: Promise<RAGEngine> | null = null
   private timeoutIds: ReturnType<typeof setTimeout>[] = [] // Use ReturnType instead of number
@@ -34,10 +41,17 @@ export default class SmartComposerPlugin extends Plugin {
 
     this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this))
     this.registerView(APPLY_VIEW_TYPE, (leaf) => new ApplyView(leaf))
+    this.registerView(
+      LIBRARY_VIEW_TYPE,
+      (leaf) => new LibraryView(leaf, this),
+    )
 
     // This creates an icon in the left ribbon.
     this.addRibbonIcon('wand-sparkles', 'Open smart composer', () =>
       this.openChatView(),
+    )
+    this.addRibbonIcon('library', 'Open library', () =>
+      this.activateLibraryView(),
     )
 
     // This adds a simple command that can be triggered anywhere
@@ -45,6 +59,12 @@ export default class SmartComposerPlugin extends Plugin {
       id: 'open-new-chat',
       name: 'Open chat',
       callback: () => this.openChatView(true),
+    })
+
+    this.addCommand({
+      id: 'open-library',
+      name: 'Open library',
+      callback: () => this.activateLibraryView(),
     })
 
     this.addCommand({
@@ -125,6 +145,43 @@ export default class SmartComposerPlugin extends Plugin {
       },
     })
 
+    this.addCommand({
+      id: 'sync-zotero-library',
+      name: 'Sync Zotero library',
+      callback: async () => {
+        if (!this.zoteroSync) return
+        const notice = new Notice('Syncing Zotero library...', 0)
+        try {
+          const result = await this.zoteroSync.sync((msg) => {
+            notice.setMessage(msg)
+          })
+          notice.setMessage(
+            `Sync complete: ${result.synced}/${result.total} papers synced`,
+          )
+        } catch (error) {
+          console.error('Zotero sync failed:', error)
+          notice.setMessage('Zotero sync failed')
+        } finally {
+          this.registerTimeout(() => notice.hide(), 3000)
+        }
+      },
+    })
+
+    // Initialize Zotero sync
+    if (Platform.isDesktop) {
+      this.zoteroClient = new ZoteroClient(this.settings.zotero.apiBaseUrl)
+      this.zoteroSync = new ZoteroSync(
+        this.app,
+        this.settings,
+        this.zoteroClient,
+      )
+      this.zoteroSync.startWatcher()
+
+      this.addSettingsChangeListener((newSettings) => {
+        this.zoteroSync?.updateSettings(newSettings)
+      })
+    }
+
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new SmartComposerSettingTab(this.app, this))
 
@@ -151,6 +208,11 @@ export default class SmartComposerPlugin extends Plugin {
     // McpManager cleanup
     this.mcpManager?.cleanup()
     this.mcpManager = null
+
+    // Zotero cleanup
+    this.zoteroSync?.cleanup()
+    this.zoteroSync = null
+    this.zoteroClient = null
   }
 
   async loadSettings() {
@@ -218,6 +280,23 @@ ${validationResult.error.issues.map((v) => v.message).join('\n')}`)
     this.app.workspace.revealLeaf(
       this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0],
     )
+  }
+
+  async activateLibraryView() {
+    const existing = this.app.workspace.getLeavesOfType(LIBRARY_VIEW_TYPE)[0]
+    if (existing) {
+      this.app.workspace.revealLeaf(existing)
+      return
+    }
+
+    const leaf = this.app.workspace.getLeftLeaf(false)
+    await leaf?.setViewState({
+      type: LIBRARY_VIEW_TYPE,
+      active: true,
+    })
+    if (leaf) {
+      this.app.workspace.revealLeaf(leaf)
+    }
   }
 
   async addSelectionToChat(editor: Editor, view: MarkdownView) {

@@ -2,9 +2,10 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { BaseLLMProvider } from '../../core/llm/base'
 import { McpManager } from '../../core/mcp/mcpManager'
+import { PdfToolProvider } from '../../core/pdf/pdfToolProvider'
 import { ChatMessage, ChatToolMessage } from '../../types/chat'
 import { ChatModel } from '../../types/chat-model.types'
-import { RequestTool } from '../../types/llm/request'
+import { ContentPart, RequestTool } from '../../types/llm/request'
 import {
   Annotation,
   LLMResponseStreaming,
@@ -72,20 +73,27 @@ export class ResponseGenerator {
         return
       }
 
+      const pdfToolProvider = this.promptGenerator.pdfToolProvider
       const toolMessage: ChatToolMessage = {
         role: 'tool' as const,
         id: uuidv4(),
-        toolCalls: toolCallRequests.map((toolCall) => ({
-          request: toolCall,
-          response: {
-            status: this.mcpManager.isToolExecutionAllowed({
-              requestToolName: toolCall.name,
-              conversationId: this.conversationId,
-            })
-              ? ToolCallResponseStatus.Running
-              : ToolCallResponseStatus.PendingApproval,
-          },
-        })),
+        toolCalls: toolCallRequests.map((toolCall) => {
+          const isPdfTool =
+            pdfToolProvider?.isPdfTool(toolCall.name) ?? false
+          return {
+            request: toolCall,
+            response: {
+              status:
+                isPdfTool ||
+                this.mcpManager.isToolExecutionAllowed({
+                  requestToolName: toolCall.name,
+                  conversationId: this.conversationId,
+                })
+                  ? ToolCallResponseStatus.Running
+                  : ToolCallResponseStatus.PendingApproval,
+            },
+          }
+        }),
       }
 
       this.updateResponseMessages((messages) => [...messages, toolMessage])
@@ -97,12 +105,62 @@ export class ResponseGenerator {
               toolCall.response.status === ToolCallResponseStatus.Running,
           )
           .map(async (toolCall) => {
-            const response = await this.mcpManager.callTool({
-              name: toolCall.request.name,
-              args: toolCall.request.arguments,
-              id: toolCall.request.id,
-              signal: this.abortSignal,
-            })
+            const pdfToolProvider =
+              this.promptGenerator.pdfToolProvider
+            const isPdfTool =
+              pdfToolProvider?.isPdfTool(toolCall.request.name) ?? false
+
+            let response
+            if (isPdfTool && pdfToolProvider) {
+              // Handle PDF tool call directly
+              try {
+                const args =
+                  typeof toolCall.request.arguments === 'string'
+                    ? (JSON.parse(toolCall.request.arguments) as Record<
+                        string,
+                        unknown
+                      >)
+                    : ((toolCall.request.arguments ?? {}) as Record<
+                        string,
+                        unknown
+                      >)
+                const result = await pdfToolProvider.handleToolCall(
+                  toolCall.request.name,
+                  args,
+                )
+                // Convert ContentPart[] to string for tool response
+                const text =
+                  typeof result.content === 'string'
+                    ? result.content
+                    : (result.content as ContentPart[])
+                        .filter(
+                          (p): p is { type: 'text'; text: string } =>
+                            p.type === 'text',
+                        )
+                        .map((p) => p.text)
+                        .join('\n')
+                response = {
+                  status: ToolCallResponseStatus.Success as const,
+                  data: { type: 'text' as const, text },
+                }
+              } catch (error) {
+                response = {
+                  status: ToolCallResponseStatus.Error as const,
+                  error:
+                    error instanceof Error
+                      ? error.message
+                      : 'PDF tool call failed',
+                }
+              }
+            } else {
+              response = await this.mcpManager.callTool({
+                name: toolCall.request.name,
+                args: toolCall.request.arguments,
+                id: toolCall.request.id,
+                signal: this.abortSignal,
+              })
+            }
+
             this.updateResponseMessages((messages) =>
               messages.map((message) =>
                 message.id === toolMessage.id && message.role === 'tool'
@@ -144,9 +202,10 @@ export class ResponseGenerator {
   private async streamSingleResponse(): Promise<{
     toolCallRequests: ToolCallRequest[]
   }> {
-    const requestMessages = await this.promptGenerator.generateRequestMessages({
-      messages: [...this.receivedMessages, ...this.responseMessages],
-    })
+    const { requestMessages: generatedMessages, pdfTools } =
+      await this.promptGenerator.generateRequestMessages({
+        messages: [...this.receivedMessages, ...this.responseMessages],
+      })
 
     const availableTools = this.enableTools
       ? await this.mcpManager.listAvailableTools()
@@ -154,26 +213,27 @@ export class ResponseGenerator {
 
     // Set tools to undefined when no tools are available since some providers
     // reject empty tools arrays.
+    const mcpTools: RequestTool[] = availableTools.map((tool) => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          ...tool.inputSchema,
+          properties: tool.inputSchema.properties ?? {},
+        },
+      },
+    }))
+
+    const allTools = [...mcpTools, ...(pdfTools ?? [])]
     const tools: RequestTool[] | undefined =
-      availableTools.length > 0
-        ? availableTools.map((tool) => ({
-            type: 'function',
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: {
-                ...tool.inputSchema,
-                properties: tool.inputSchema.properties ?? {},
-              },
-            },
-          }))
-        : undefined
+      allTools.length > 0 ? allTools : undefined
 
     const stream = await this.providerClient.streamResponse(
       this.model,
       {
         model: this.model.model,
-        messages: requestMessages,
+        messages: generatedMessages,
         tools,
         stream: true,
       },

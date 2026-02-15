@@ -44,6 +44,14 @@ describe('parseSmartComposerSettings', () => {
         enableTools: true,
         maxAutoIterations: 1,
       },
+
+      zotero: {
+        apiBaseUrl: 'http://localhost:23119',
+        zoteroStoragePath: '',
+        libraryVaultPath: 'Library',
+        selectedCollection: '',
+        pdfExtractionModelId: '',
+      },
     })
   })
 })
