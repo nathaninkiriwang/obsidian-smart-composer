@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 
-import { App, Notice, Platform, normalizePath } from 'obsidian'
+import { App, Notice, Platform, TFile, TFolder, normalizePath } from 'obsidian'
 
 import { SmartComposerSettings } from '../../settings/schema/setting.types'
 import { CollectionTreeNode, ZoteroItem } from '../../types/zotero.types'
@@ -99,6 +99,9 @@ export class ZoteroSync {
       // Pre-compute target filenames with collision handling
       const filenameMap = this.buildFilenameMap(items)
 
+      // Track all expected PDF paths so we can remove orphans afterwards
+      const expectedPaths = new Set<string>()
+
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
         onProgress?.(
@@ -109,11 +112,21 @@ export class ZoteroSync {
         if (!newFilename) continue
 
         try {
-          await this.syncItem(item, storagePath, collectionPathMap, libraryPath, newFilename)
+          const paths = await this.syncItem(item, storagePath, collectionPathMap, libraryPath, newFilename)
+          for (const p of paths) {
+            expectedPaths.add(p)
+          }
           synced++
         } catch {
           // Skip items that fail to sync
         }
+      }
+
+      // Remove vault PDFs that are no longer in Zotero
+      onProgress?.('Cleaning up removed papers...')
+      const removed = await this.removeOrphanedFiles(libraryPath, expectedPaths)
+      if (removed > 0) {
+        onProgress?.(`Removed ${removed} orphaned PDF(s)`)
       }
 
       onProgress?.(`Sync complete: ${synced}/${total} papers synced`)
@@ -149,13 +162,14 @@ export class ZoteroSync {
     return result
   }
 
+  /** Sync a single item's PDF to the vault. Returns the list of destination paths. */
   private async syncItem(
     item: ZoteroItem,
     storagePath: string,
     collectionPathMap: Map<string, string>,
     libraryPath: string,
     newFilename: string,
-  ): Promise<void> {
+  ): Promise<string[]> {
     // Find PDF attachment
     const attachments = await this.client.fetchAttachments(item.key)
     const pdfAttachment = attachments.find(
@@ -164,7 +178,7 @@ export class ZoteroSync {
     )
 
     if (!pdfAttachment || !pdfAttachment.data.filename) {
-      return
+      return []
     }
 
     // Resolve source file path
@@ -175,7 +189,7 @@ export class ZoteroSync {
     )
 
     if (!fs.existsSync(sourcePath)) {
-      return
+      return []
     }
 
     const sourceStats = fs.statSync(sourcePath)
@@ -201,8 +215,10 @@ export class ZoteroSync {
     }
 
     // Copy to each destination using the new friendly filename
+    const destPaths: string[] = []
     for (const folder of destFolders) {
       const destPath = normalizePath(`${folder}/${newFilename}`)
+      destPaths.push(destPath)
 
       // Check if already exists with same size (skip if so)
       const existingFile = this.app.vault.getAbstractFileByPath(destPath)
@@ -233,6 +249,37 @@ export class ZoteroSync {
         ) as ArrayBuffer,
       )
     }
+
+    return destPaths
+  }
+
+  /** Remove PDFs in the Library vault folder that are not in the expected set. */
+  private async removeOrphanedFiles(
+    libraryPath: string,
+    expectedPaths: Set<string>,
+  ): Promise<number> {
+    const folder = this.app.vault.getAbstractFileByPath(libraryPath)
+    if (!folder || !(folder instanceof TFolder)) return 0
+
+    const orphans: TFile[] = []
+    const collectPdfs = (f: TFolder) => {
+      for (const child of f.children) {
+        if (child instanceof TFile && child.extension === 'pdf') {
+          if (!expectedPaths.has(child.path)) {
+            orphans.push(child)
+          }
+        } else if (child instanceof TFolder) {
+          collectPdfs(child)
+        }
+      }
+    }
+    collectPdfs(folder)
+
+    for (const orphan of orphans) {
+      await this.app.vault.delete(orphan)
+    }
+
+    return orphans.length
   }
 
   private async ensureFolder(folderPath: string): Promise<void> {
