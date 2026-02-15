@@ -29,6 +29,7 @@ export class ZoteroSync {
   private settings: SmartComposerSettings
   private watcher: fs.FSWatcher | null = null
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
+  private pollInterval: ReturnType<typeof setInterval> | null = null
   private syncing = false
 
   constructor(app: App, settings: SmartComposerSettings, client: ZoteroClient) {
@@ -312,6 +313,13 @@ export class ZoteroSync {
     } catch (e) {
       console.warn('Failed to start Zotero file watcher:', e)
     }
+
+    // Poll every 30 seconds to catch deletions that fs.watch may miss
+    this.pollInterval = setInterval(() => {
+      void this.sync((msg) => {
+        console.log(`[Zotero Sync] ${msg}`)
+      })
+    }, 30_000)
   }
 
   private restartWatcher(): void {
@@ -323,6 +331,10 @@ export class ZoteroSync {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = null
+    }
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval)
+      this.pollInterval = null
     }
     if (this.watcher) {
       this.watcher.close()
