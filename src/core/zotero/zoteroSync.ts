@@ -6,13 +6,11 @@ import { App, Notice, Platform, TFile, TFolder, normalizePath } from 'obsidian'
 import { SmartComposerSettings } from '../../settings/schema/setting.types'
 import { CollectionTreeNode, ZoteroItem } from '../../types/zotero.types'
 
-import { buildPdfFilename } from './pdfNaming'
+import { buildFilenameMap } from './pdfNaming'
 import {
   ZoteroClient,
   buildCollectionTree,
-  extractYear,
   flattenCollectionTree,
-  getAuthorLastNames,
 } from './zoteroClient'
 
 function resolveHome(filepath: string): string {
@@ -31,11 +29,17 @@ export class ZoteroSync {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private pollInterval: ReturnType<typeof setInterval> | null = null
   private syncing = false
+  private _syncedPaths = new Map<string, string[]>()
 
   constructor(app: App, settings: SmartComposerSettings, client: ZoteroClient) {
     this.app = app
     this.settings = settings
     this.client = client
+  }
+
+  /** Returns the zoteroKey → vaultPaths mapping from the latest sync. */
+  getSyncedPaths(): Map<string, string[]> {
+    return this._syncedPaths
   }
 
   updateSettings(settings: SmartComposerSettings) {
@@ -98,10 +102,11 @@ export class ZoteroSync {
       const total = items.length
 
       // Pre-compute target filenames with collision handling
-      const filenameMap = this.buildFilenameMap(items)
+      const filenameMap = buildFilenameMap(items)
 
       // Track all expected PDF paths so we can remove orphans afterwards
       const expectedPaths = new Set<string>()
+      const newSyncedPaths = new Map<string, string[]>()
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
@@ -117,11 +122,16 @@ export class ZoteroSync {
           for (const p of paths) {
             expectedPaths.add(p)
           }
+          if (paths.length > 0) {
+            newSyncedPaths.set(item.key, paths)
+          }
           synced++
         } catch {
           // Skip items that fail to sync
         }
       }
+
+      this._syncedPaths = newSyncedPaths
 
       // Remove vault PDFs that are no longer in Zotero
       onProgress?.('Cleaning up removed papers...')
@@ -135,32 +145,6 @@ export class ZoteroSync {
     } finally {
       this.syncing = false
     }
-  }
-
-  /** Pre-compute unique filenames for all items, handling collisions. */
-  private buildFilenameMap(items: ZoteroItem[]): Map<string, string> {
-    const result = new Map<string, string>()
-    const counts = new Map<string, number>()
-
-    for (const item of items) {
-      const authors = getAuthorLastNames(item.data.creators)
-      const year = extractYear(item.data.date)
-      const baseName = buildPdfFilename(authors, year, item.data.title)
-
-      const prev = counts.get(baseName) ?? 0
-      counts.set(baseName, prev + 1)
-
-      if (prev === 0) {
-        result.set(item.key, baseName)
-      } else {
-        // Append collision suffix: "Smith et al. 2024 (2).pdf"
-        const ext = '.pdf'
-        const stem = baseName.slice(0, -ext.length)
-        result.set(item.key, `${stem} (${prev + 1})${ext}`)
-      }
-    }
-
-    return result
   }
 
   /** Sync a single item's PDF to the vault. Returns the list of destination paths. */

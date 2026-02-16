@@ -4,11 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../../contexts/app-context'
 import { usePlugin } from '../../contexts/plugin-context'
 import { useSettings } from '../../contexts/settings-context'
-import { buildPdfFilename } from '../../core/zotero/pdfNaming'
-import {
-  extractYear,
-  getAuthorLastNames,
-} from '../../core/zotero/zoteroClient'
+import { buildFilenameMap } from '../../core/zotero/pdfNaming'
 import { usePaperSelection } from '../../hooks/usePaperSelection'
 import { PaperMetadata } from '../../types/zotero.types'
 
@@ -79,6 +75,12 @@ export function LibraryPane() {
         await client.fetchItemsWithAttachments(collectionKey)
       const fileIndex = buildFileIndex()
 
+      // Build collision-handled filename map (fallback for before first sync)
+      const filenameMap = buildFilenameMap(items)
+
+      // Get synced paths from latest sync (primary lookup)
+      const syncedPaths = plugin.zoteroSync?.getSyncedPaths()
+
       const paperList: PaperMetadata[] = []
       for (const item of items) {
         const attachment = attachmentMap.get(item.key)
@@ -86,11 +88,35 @@ export function LibraryPane() {
           paperList.push(client.buildPaperMetadata(item, ''))
           continue
         }
-        // Look up using the renamed filename (matching sync logic)
-        const authors = getAuthorLastNames(item.data.creators)
-        const year = extractYear(item.data.date)
-        const renamedFilename = buildPdfFilename(authors, year, item.data.title)
-        const vaultPath = fileIndex.get(renamedFilename) ?? ''
+
+        // Multi-layer file lookup:
+        // 1. Synced paths from latest sync (exact, handles collisions correctly)
+        let vaultPath = ''
+        const syncedItemPaths = syncedPaths?.get(item.key)
+        if (syncedItemPaths && syncedItemPaths.length > 0) {
+          // Prefer a path that still exists in the vault
+          for (const p of syncedItemPaths) {
+            if (fileIndex.has(p.split('/').pop() ?? '')) {
+              vaultPath = p
+              break
+            }
+          }
+          if (!vaultPath) vaultPath = syncedItemPaths[0]
+        }
+
+        // 2. Collision-handled filename map (fallback)
+        if (!vaultPath) {
+          const renamedFilename = filenameMap.get(item.key)
+          if (renamedFilename) {
+            vaultPath = fileIndex.get(renamedFilename) ?? ''
+          }
+        }
+
+        // 3. Original Zotero filename (last resort, e.g. external sync)
+        if (!vaultPath && attachment.data.filename) {
+          vaultPath = fileIndex.get(attachment.data.filename) ?? ''
+        }
+
         paperList.push(client.buildPaperMetadata(item, vaultPath))
       }
 
@@ -105,7 +131,7 @@ export function LibraryPane() {
       setLoading(false)
       fetchingRef.current = false
     }
-  }, [plugin.zoteroClient, selectedCollection, buildFileIndex])
+  }, [plugin.zoteroClient, plugin.zoteroSync, selectedCollection, buildFileIndex])
 
   // Fetch on mount and when collection or refreshKey changes
   useEffect(() => {
