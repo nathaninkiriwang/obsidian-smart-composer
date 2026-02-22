@@ -2905,20 +2905,18 @@ button.smtcmp-chat-input-model-select {
   overflow: hidden;
 }
 
-/* PDF region capture overlay */
+/* PDF region capture */
 
-.smtcmp-pdf-selection-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
+.smtcmp-pdf-capture-active {
   cursor: crosshair;
 }
 
 .smtcmp-pdf-selection-rect {
-  position: absolute;
+  position: fixed;
   border: 2px dashed var(--interactive-accent);
   background: rgba(var(--interactive-accent-rgb, 72, 120, 240), 0.1);
   pointer-events: none;
+  z-index: 9999;
 }
 
 .smtcmp-pdf-selection-rect--captured {
