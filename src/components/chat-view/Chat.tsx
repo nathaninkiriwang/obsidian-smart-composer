@@ -38,6 +38,7 @@ import {
 import {
   MentionableBlock,
   MentionableBlockData,
+  MentionableImage,
   MentionablePdf,
 } from '../../types/mentionable'
 import { ToolCallResponseStatus } from '../../types/tool-call.types'
@@ -75,6 +76,7 @@ const getNewInputMessage = (): ChatUserMessage => {
 export type ChatRef = {
   openNewChat: (selectedBlock?: MentionableBlockData) => void
   addSelectionToChat: (selectedBlock: MentionableBlockData) => void
+  addImageToChat: (image: MentionableImage) => void
   focusMessage: () => void
 }
 
@@ -113,11 +115,7 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
         setSettings,
       })
     }, extractor)
-    const pdfToolProvider = new PdfToolProvider(
-      extractor,
-      analyzer,
-      app.vault,
-    )
+    const pdfToolProvider = new PdfToolProvider(extractor, analyzer, app.vault)
     promptGenerator.setPdfToolProvider(pdfToolProvider)
   }, [promptGenerator, settings, setSettings, app.vault])
 
@@ -469,7 +467,6 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
     updateConversationAsync()
   }, [currentConversationId, chatMessages, createOrUpdateConversation])
 
-
   // Sync paper selection store → chat mentionables (Library → Chat)
   useEffect(() => {
     const store = plugin.paperSelection
@@ -495,7 +492,7 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
             const file = app.vault.getFileByPath(p.pdfPath)
             if (!file) return null
             const firstAuthor = p.authors[0]
-              ? p.authors[0].split(',')[0].split(' ').pop() ?? ''
+              ? (p.authors[0].split(',')[0].split(' ').pop() ?? '')
               : ''
             return {
               type: 'pdf',
@@ -596,6 +593,22 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
           }),
         )
       }
+    },
+    addImageToChat: (image: MentionableImage) => {
+      setInputMessage((prev) => {
+        const imageKey = getMentionableKey(serializeMentionable(image))
+        if (
+          prev.mentionables.some(
+            (m) => getMentionableKey(serializeMentionable(m)) === imageKey,
+          )
+        ) {
+          return prev
+        }
+        return {
+          ...prev,
+          mentionables: [...prev.mentionables, image],
+        }
+      })
     },
     focusMessage: () => {
       if (!focusedMessageId) return

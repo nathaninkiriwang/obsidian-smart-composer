@@ -2,24 +2,26 @@ import { Editor, MarkdownView, Notice, Platform, Plugin } from 'obsidian'
 
 import { ApplyView } from './ApplyView'
 import { ChatView } from './ChatView'
-import { LibraryView } from './LibraryView'
 import { ChatProps } from './components/chat-view/Chat'
 import { InstallerUpdateRequiredModal } from './components/modals/InstallerUpdateRequiredModal'
 import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE, LIBRARY_VIEW_TYPE } from './constants'
 import { McpManager } from './core/mcp/mcpManager'
 import { PaperSelectionStore } from './core/paper-selection/store'
+import { PdfViewDetector } from './core/pdf/PdfViewDetector'
 import { RAGEngine } from './core/rag/ragEngine'
 import { ZoteroClient } from './core/zotero/zoteroClient'
 import { ZoteroSync } from './core/zotero/zoteroSync'
 import { DatabaseManager } from './database/DatabaseManager'
 import { PGLiteAbortedException } from './database/exception'
 import { migrateToJsonDatabase } from './database/json/migrateToJsonDatabase'
+import { LibraryView } from './LibraryView'
 import {
   SmartComposerSettings,
   smartComposerSettingsSchema,
 } from './settings/schema/setting.types'
 import { parseSmartComposerSettings } from './settings/schema/settings'
 import { SmartComposerSettingTab } from './settings/SettingTab'
+import { MentionableImage } from './types/mentionable'
 import { getMentionableBlockData } from './utils/obsidian'
 
 export default class SmartComposerPlugin extends Plugin {
@@ -32,6 +34,7 @@ export default class SmartComposerPlugin extends Plugin {
   zoteroClient: ZoteroClient | null = null
   zoteroSync: ZoteroSync | null = null
   paperSelection: PaperSelectionStore = new PaperSelectionStore()
+  private pdfViewDetector: PdfViewDetector | null = null
   private dbManagerInitPromise: Promise<DatabaseManager> | null = null
   private ragEngineInitPromise: Promise<RAGEngine> | null = null
   private timeoutIds: ReturnType<typeof setTimeout>[] = [] // Use ReturnType instead of number
@@ -41,10 +44,7 @@ export default class SmartComposerPlugin extends Plugin {
 
     this.registerView(CHAT_VIEW_TYPE, (leaf) => new ChatView(leaf, this))
     this.registerView(APPLY_VIEW_TYPE, (leaf) => new ApplyView(leaf))
-    this.registerView(
-      LIBRARY_VIEW_TYPE,
-      (leaf) => new LibraryView(leaf, this),
-    )
+    this.registerView(LIBRARY_VIEW_TYPE, (leaf) => new LibraryView(leaf, this))
 
     // This creates an icon in the left ribbon.
     this.addRibbonIcon('wand-sparkles', 'Open smart composer', () =>
@@ -185,6 +185,13 @@ export default class SmartComposerPlugin extends Plugin {
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new SmartComposerSettingTab(this.app, this))
 
+    // Initialize PDF region capture overlay
+    this.app.workspace.onLayoutReady(() => {
+      this.pdfViewDetector = new PdfViewDetector(this.app.workspace, (image) =>
+        this.captureRegionToChat(image),
+      )
+    })
+
     void this.migrateToJsonStorage()
   }
 
@@ -208,6 +215,10 @@ export default class SmartComposerPlugin extends Plugin {
     // McpManager cleanup
     this.mcpManager?.cleanup()
     this.mcpManager = null
+
+    // PDF overlay cleanup
+    this.pdfViewDetector?.destroy()
+    this.pdfViewDetector = null
 
     // Zotero cleanup
     this.zoteroSync?.cleanup()
@@ -317,6 +328,25 @@ ${validationResult.error.issues.map((v) => v.message).join('\n')}`)
     const chatView = leaves[0].view
     chatView.addSelectionToChat(data)
     chatView.focusMessage()
+  }
+
+  async captureRegionToChat(image: MentionableImage) {
+    // Ensure the chat view is open
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)
+    if (leaves.length === 0 || !(leaves[0].view instanceof ChatView)) {
+      await this.activateChatView()
+    }
+
+    // Wait a tick for the view to mount
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const chatLeaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)
+    if (chatLeaves.length > 0 && chatLeaves[0].view instanceof ChatView) {
+      const chatView = chatLeaves[0].view
+      chatView.addImageToChat(image)
+      this.app.workspace.revealLeaf(chatLeaves[0])
+      chatView.focusMessage()
+    }
   }
 
   async getDbManager(): Promise<DatabaseManager> {

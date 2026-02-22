@@ -15,7 +15,7 @@ import { PluginProvider } from './contexts/plugin-context'
 import { RAGProvider } from './contexts/rag-context'
 import { SettingsProvider } from './contexts/settings-context'
 import SmartComposerPlugin from './main'
-import { MentionableBlockData } from './types/mentionable'
+import { MentionableBlockData, MentionableImage } from './types/mentionable'
 
 export class ChatView extends ItemView {
   private root: Root | null = null
@@ -121,6 +121,10 @@ export class ChatView extends ItemView {
 
   addSelectionToChat(selectedBlock: MentionableBlockData) {
     this.chatRef.current?.addSelectionToChat(selectedBlock)
+  }
+
+  addImageToChat(image: MentionableImage) {
+    this.chatRef.current?.addImageToChat(image)
   }
 
   focusMessage() {

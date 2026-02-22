@@ -222,11 +222,17 @@
   font-size: var(--font-ui-small);
   border-radius: var(--radius-s);
   outline: none;
-  transition: border-color 0.15s ease-in-out, background-color 0.15s ease-in-out;
+  transition:
+    border-color 0.15s ease-in-out,
+    background-color 0.15s ease-in-out;
 
   &:hover {
     border-color: var(--background-modifier-border-hover);
-    background-color: color-mix(in srgb, var(--background-modifier-form-field) 92%, var(--text-faint));
+    background-color: color-mix(
+      in srgb,
+      var(--background-modifier-form-field) 92%,
+      var(--text-faint)
+    );
   }
 
   &:focus-within,
@@ -2248,7 +2254,8 @@ button.smtcmp-chat-input-model-select {
 
 .smtcmp-library-search-input-wrapper:focus-within {
   border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--interactive-accent) 15%, transparent);
   background: var(--background-primary);
 }
 
@@ -2341,12 +2348,20 @@ button.smtcmp-chat-input-model-select {
 .smtcmp-library-filter-button-active {
   color: var(--interactive-accent);
   border-color: color-mix(in srgb, var(--interactive-accent) 40%, transparent);
-  background: color-mix(in srgb, var(--interactive-accent) 6%, var(--background-secondary));
+  background: color-mix(
+    in srgb,
+    var(--interactive-accent) 6%,
+    var(--background-secondary)
+  );
 }
 
 .smtcmp-library-filter-button-active:hover {
   border-color: var(--interactive-accent);
-  background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-secondary));
+  background: color-mix(
+    in srgb,
+    var(--interactive-accent) 10%,
+    var(--background-secondary)
+  );
 }
 
 .smtcmp-library-filter-badge {
@@ -2417,7 +2432,8 @@ button.smtcmp-chat-input-model-select {
 
 .smtcmp-library-filter-year-input:focus {
   border-color: var(--interactive-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--interactive-accent) 15%, transparent);
   outline: none;
 }
 
@@ -2530,14 +2546,24 @@ button.smtcmp-chat-input-model-select {
 /* Selected state — distinct accent glow */
 .smtcmp-library-paper-card-selected {
   border-color: var(--interactive-accent);
-  background: color-mix(in srgb, var(--interactive-accent) 5%, var(--background-secondary));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 15%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--interactive-accent) 5%,
+    var(--background-secondary)
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--interactive-accent) 15%, transparent);
 }
 
 .smtcmp-library-paper-card-selected:hover {
   border-color: var(--interactive-accent);
-  background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-secondary));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 25%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--interactive-accent) 8%,
+    var(--background-secondary)
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--interactive-accent) 25%, transparent);
 }
 
 /* Left accent stripe on selected cards */
@@ -2594,20 +2620,28 @@ button.smtcmp-chat-input-model-select {
     box-shadow 0.2s ease;
 }
 
-.smtcmp-library-paper-checkbox:hover .smtcmp-library-checkbox-box:not(.smtcmp-library-checkbox-checked) {
+.smtcmp-library-paper-checkbox:hover
+  .smtcmp-library-checkbox-box:not(.smtcmp-library-checkbox-checked) {
   background: var(--background-modifier-border);
 }
 
 .smtcmp-library-checkbox-checked {
   background: var(--interactive-accent);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--interactive-accent) 30%, transparent);
+  box-shadow: 0 1px 3px
+    color-mix(in srgb, var(--interactive-accent) 30%, transparent);
   animation: smtcmp-checkbox-pop 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes smtcmp-checkbox-pop {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.2); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .smtcmp-library-checkbox-checked svg {
@@ -2760,7 +2794,8 @@ button.smtcmp-chat-input-model-select {
 }
 
 @keyframes smtcmp-skeleton-shimmer {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
   }
   50% {
@@ -2868,4 +2903,25 @@ button.smtcmp-chat-input-model-select {
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* PDF region capture overlay */
+
+.smtcmp-pdf-selection-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  cursor: crosshair;
+}
+
+.smtcmp-pdf-selection-rect {
+  position: absolute;
+  border: 2px dashed var(--interactive-accent);
+  background: rgba(var(--interactive-accent-rgb, 72, 120, 240), 0.1);
+  pointer-events: none;
+}
+
+.smtcmp-pdf-selection-rect--captured {
+  background: rgba(var(--interactive-accent-rgb, 72, 120, 240), 0.3);
+  transition: background 0.2s ease;
 }
