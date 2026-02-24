@@ -214,7 +214,7 @@
   display: flex;
   flex-direction: column;
   -webkit-app-region: no-drag;
-  background: color-mix(in srgb, var(--background-primary) 70%, var(--background-secondary) 30%);
+  background: var(--background-secondary);
   border: 1px solid var(--background-modifier-border);
   color: var(--text-normal);
   font-family: inherit;
@@ -238,9 +238,15 @@
   }
 }
 
-/* Compact variant for history messages — no controls, tighter padding */
+/* Compact variant for history messages — no controls, auto-fit height */
 .smtcmp-chat-user-input-container--compact {
   padding: var(--size-2-2) var(--size-2-3);
+}
+
+.smtcmp-chat-user-input-container--compact .obsidian-default-textarea {
+  min-height: unset;
+  max-height: unset;
+  overflow-y: visible;
 }
 
 .smtcmp-chat-user-input-files {

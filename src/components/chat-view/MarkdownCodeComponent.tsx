@@ -48,68 +48,16 @@ export default function MarkdownCodeComponent({
 
   return (
     <div className="smtcmp-code-block">
-      <div className="smtcmp-code-block-header">
-        {filename && (
+      {filename && (
+        <div className="smtcmp-code-block-header">
           <div
             className="smtcmp-code-block-header-filename"
             onClick={handleOpenFile}
           >
             {filename}
           </div>
-        )}
-        <div className="smtcmp-code-block-header-button-container">
-          <button
-            className="clickable-icon smtcmp-code-block-header-button"
-            onClick={() => {
-              setIsPreviewMode(!isPreviewMode)
-            }}
-          >
-            <Eye size={12} />
-            {isPreviewMode ? 'View Raw Text' : 'View Formatted'}
-          </button>
-          <button
-            className="clickable-icon smtcmp-code-block-header-button"
-            onClick={() => {
-              handleCopy()
-            }}
-          >
-            {copied ? (
-              <>
-                <Check size={10} />
-                <span>Copied</span>
-              </>
-            ) : (
-              <>
-                <CopyIcon size={10} />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-          <button
-            className="clickable-icon smtcmp-code-block-header-button"
-            onClick={
-              isApplying
-                ? undefined
-                : () => {
-                    onApply(String(children))
-                  }
-            }
-            aria-disabled={isApplying}
-          >
-            {isApplying ? (
-              <>
-                <Loader2 className="spinner" size={14} />
-                <span>Applying...</span>
-              </>
-            ) : (
-              <>
-                <Play size={10} />
-                <span>Apply</span>
-              </>
-            )}
-          </button>
         </div>
-      </div>
+      )}
       {isPreviewMode ? (
         <div className="smtcmp-code-block-obsidian-markdown">
           <ObsidianMarkdown content={String(children)} scale="sm" />
@@ -126,6 +74,15 @@ export default function MarkdownCodeComponent({
       )}
       <div className="smtcmp-code-block-footer">
         <div className="smtcmp-code-block-header-button-container">
+          <button
+            className="clickable-icon smtcmp-code-block-header-button"
+            onClick={() => {
+              setIsPreviewMode(!isPreviewMode)
+            }}
+          >
+            <Eye size={12} />
+            {isPreviewMode ? 'View Raw Text' : 'View Formatted'}
+          </button>
           <button
             className="clickable-icon smtcmp-code-block-header-button"
             onClick={() => {
