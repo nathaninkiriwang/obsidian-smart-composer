@@ -11,6 +11,8 @@ export class PdfViewDetector {
   constructor(
     private workspace: Workspace,
     private onCapture: (image: MentionableImage) => void,
+    private onTextSelection: (text: string) => void,
+    private onMathConversion: (imageDataUrl: string) => Promise<string>,
   ) {
     const layoutCb = () => this.scan()
     const leafCb = () => this.scan()
@@ -59,7 +61,12 @@ export class PdfViewDetector {
     // Add overlays for new containers
     for (const container of pdfContainers) {
       if (!this.overlays.has(container)) {
-        const overlay = new PdfSelectionOverlay(container, this.onCapture)
+        const overlay = new PdfSelectionOverlay(
+          container,
+          this.onCapture,
+          this.onTextSelection,
+          this.onMathConversion,
+        )
         this.overlays.set(container, overlay)
       }
     }

@@ -19,6 +19,7 @@ import {
   MentionableFolder,
   MentionableImage,
   MentionablePdf,
+  MentionablePdfText,
   MentionableUrl,
   MentionableVault,
 } from '../../types/mentionable'
@@ -391,6 +392,15 @@ ${similaritySearchResults
         })
         .join('')
 
+      const pdfTexts = message.mentionables.filter(
+        (m): m is MentionablePdfText => m.type === 'pdf-text',
+      )
+      const pdfTextPrompt = pdfTexts
+        .map(({ content }) => {
+          return `[PDF text selection]:\n${content}\n`
+        })
+        .join('')
+
       const urls = message.mentionables.filter(
         (m): m is MentionableUrl => m.type === 'url',
       )
@@ -433,7 +443,7 @@ ${await this.getWebsiteContent(url)}
           ),
           {
             type: 'text',
-            text: `${filePrompt}${blockPrompt}${urlPrompt}\n\n${query}\n\n`,
+            text: `${filePrompt}${blockPrompt}${pdfTextPrompt}${urlPrompt}\n\n${query}\n\n`,
           },
         ],
         shouldUseRAG,

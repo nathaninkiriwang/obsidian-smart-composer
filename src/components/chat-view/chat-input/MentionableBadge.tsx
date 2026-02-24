@@ -11,6 +11,7 @@ import {
   MentionableFolder,
   MentionableImage,
   MentionablePdf,
+  MentionablePdfText,
   MentionableUrl,
   MentionableVault,
 } from '../../../types/mentionable'
@@ -317,6 +318,40 @@ function PdfBadge({
   )
 }
 
+function PdfTextBadge({
+  mentionable,
+  onDelete,
+  onClick,
+  isFocused,
+}: {
+  mentionable: MentionablePdfText
+  onDelete: () => void
+  onClick: () => void
+  isFocused: boolean
+}) {
+  const Icon = getMentionableIcon(mentionable)
+  const preview =
+    mentionable.content.length > 30
+      ? mentionable.content.slice(0, 30) + '...'
+      : mentionable.content
+  return (
+    <BadgeBase onDelete={onDelete} onClick={onClick} isFocused={isFocused}>
+      <div className="smtcmp-chat-user-input-file-badge-name">
+        {Icon && (
+          <Icon
+            size={12}
+            className="smtcmp-chat-user-input-file-badge-name-icon"
+          />
+        )}
+        <span>PDF Text</span>
+      </div>
+      <div className="smtcmp-chat-user-input-file-badge-name-suffix">
+        {` (${preview})`}
+      </div>
+    </BadgeBase>
+  )
+}
+
 export default function MentionableBadge({
   mentionable,
   onDelete,
@@ -395,6 +430,15 @@ export default function MentionableBadge({
     case 'pdf':
       return (
         <PdfBadge
+          mentionable={mentionable}
+          onDelete={onDelete}
+          onClick={onClick}
+          isFocused={isFocused}
+        />
+      )
+    case 'pdf-text':
+      return (
+        <PdfTextBadge
           mentionable={mentionable}
           onDelete={onDelete}
           onClick={onClick}

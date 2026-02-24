@@ -5,6 +5,7 @@ import { ChatView } from './ChatView'
 import { ChatProps } from './components/chat-view/Chat'
 import { InstallerUpdateRequiredModal } from './components/modals/InstallerUpdateRequiredModal'
 import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE, LIBRARY_VIEW_TYPE } from './constants'
+import { getChatModelClient } from './core/llm/manager'
 import { McpManager } from './core/mcp/mcpManager'
 import { PaperSelectionStore } from './core/paper-selection/store'
 import { PdfViewDetector } from './core/pdf/PdfViewDetector'
@@ -187,8 +188,11 @@ export default class SmartComposerPlugin extends Plugin {
 
     // Initialize PDF region capture overlay
     this.app.workspace.onLayoutReady(() => {
-      this.pdfViewDetector = new PdfViewDetector(this.app.workspace, (image) =>
-        this.captureRegionToChat(image),
+      this.pdfViewDetector = new PdfViewDetector(
+        this.app.workspace,
+        (image) => this.captureRegionToChat(image),
+        (text) => this.addPdfTextToChat(text),
+        (imageDataUrl) => this.convertMathImage(imageDataUrl),
       )
     })
 
@@ -344,6 +348,58 @@ ${validationResult.error.issues.map((v) => v.message).join('\n')}`)
     if (chatLeaves.length > 0 && chatLeaves[0].view instanceof ChatView) {
       const chatView = chatLeaves[0].view
       chatView.addImageToChat(image)
+      this.app.workspace.revealLeaf(chatLeaves[0])
+      chatView.focusMessage()
+    }
+  }
+
+  async convertMathImage(imageDataUrl: string): Promise<string> {
+    const modelId =
+      this.settings.zotero.pdfExtractionModelId || this.settings.chatModelId
+    const { providerClient, model } = getChatModelClient({
+      modelId,
+      settings: this.settings,
+      setSettings: (newSettings) => this.setSettings(newSettings),
+    })
+
+    const response = await providerClient.generateResponse(model, {
+      model: model.model,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a specialist at reading images of mathematical equations and scientific text from PDF documents. Convert the image content to text, using LaTeX notation (wrapped in $ or $$) for any mathematical expressions. Output ONLY the converted text, nothing else.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageDataUrl } },
+            {
+              type: 'text',
+              text: 'Convert this PDF selection to text with LaTeX math notation.',
+            },
+          ],
+        },
+      ],
+    })
+
+    return response.choices[0]?.message?.content ?? ''
+  }
+
+  async addPdfTextToChat(text: string) {
+    // Ensure the chat view is open
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)
+    if (leaves.length === 0 || !(leaves[0].view instanceof ChatView)) {
+      await this.activateChatView()
+    }
+
+    // Wait a tick for the view to mount
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const chatLeaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)
+    if (chatLeaves.length > 0 && chatLeaves[0].view instanceof ChatView) {
+      const chatView = chatLeaves[0].view
+      chatView.addPdfTextToChat(text)
       this.app.workspace.revealLeaf(chatLeaves[0])
       chatView.focusMessage()
     }

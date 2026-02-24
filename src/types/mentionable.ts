@@ -42,6 +42,11 @@ export type MentionablePdf = {
   firstAuthor?: string
   year?: string
 }
+export type MentionablePdfText = {
+  type: 'pdf-text'
+  content: string
+  sourceName: string
+}
 export type Mentionable =
   | MentionableFile
   | MentionableFolder
@@ -51,6 +56,7 @@ export type Mentionable =
   | MentionableUrl
   | MentionableImage
   | MentionablePdf
+  | MentionablePdfText
 export type SerializedMentionableFile = {
   type: 'file'
   file: string
@@ -81,6 +87,11 @@ export type SerializedMentionablePdf = {
   firstAuthor?: string
   year?: string
 }
+export type SerializedMentionablePdfText = {
+  type: 'pdf-text'
+  content: string
+  sourceName: string
+}
 export type SerializedMentionable =
   | SerializedMentionableFile
   | SerializedMentionableFolder
@@ -90,3 +101,4 @@ export type SerializedMentionable =
   | SerializedMentionableUrl
   | SerializedMentionableImage
   | SerializedMentionablePdf
+  | SerializedMentionablePdfText

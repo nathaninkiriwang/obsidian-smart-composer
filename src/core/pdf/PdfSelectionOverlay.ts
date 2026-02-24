@@ -1,26 +1,33 @@
 import { MentionableImage } from '../../types/mentionable'
 
+import { containsMathContent } from './mathDetection'
 import { SelectionRect, captureCanvasRegion } from './PdfRegionCapture'
 
 const MIN_SELECTION_SIZE = 10
 const PAGE_SELECTOR = '.page'
+const PADDING = 4
 
 export class PdfSelectionOverlay {
   private selectionRectEl: HTMLDivElement | null = null
   private isDragging = false
+  private isTextSelecting = false
   private dragStart: { x: number; y: number } | null = null
   private activePage: HTMLElement | null = null
   private activeCanvas: HTMLCanvasElement | null = null
   private captureCount = 0
+  private loadingIndicator: HTMLDivElement | null = null
 
   private boundMouseDown = (e: MouseEvent) => this.onMouseDown(e)
   private boundMouseMove = (e: MouseEvent) => this.onMouseMove(e)
   private boundMouseUp = (e: MouseEvent) => this.onMouseUp(e)
   private boundKeyDown = (e: KeyboardEvent) => this.onKeyDown(e)
+  private boundTextMouseUp = (e: MouseEvent) => this.onTextSelectionEnd(e)
 
   constructor(
     private container: HTMLElement,
     private onCapture: (image: MentionableImage) => void,
+    private onTextSelection: (text: string) => void,
+    private onMathConversion: (imageDataUrl: string) => Promise<string>,
   ) {
     this.container.classList.add('smtcmp-pdf-capture-active')
     this.container.addEventListener('mousedown', this.boundMouseDown)
@@ -28,10 +35,12 @@ export class PdfSelectionOverlay {
 
   destroy() {
     this.cancelSelection()
+    this.removeLoadingIndicator()
     this.container.classList.remove('smtcmp-pdf-capture-active')
     this.container.removeEventListener('mousedown', this.boundMouseDown)
     document.removeEventListener('mousemove', this.boundMouseMove)
     document.removeEventListener('mouseup', this.boundMouseUp)
+    document.removeEventListener('mouseup', this.boundTextMouseUp)
     document.removeEventListener('keydown', this.boundKeyDown)
   }
 
@@ -48,6 +57,17 @@ export class PdfSelectionOverlay {
     const canvas = page.querySelector('canvas')
     if (!(canvas instanceof HTMLCanvasElement)) return
 
+    // If clicking inside the text layer, allow native text selection
+    if (target.closest('.textLayer')) {
+      this.isTextSelecting = true
+      this.activePage = page
+      this.activeCanvas = canvas
+      // Do NOT call e.preventDefault() — let native text selection work
+      document.addEventListener('mouseup', this.boundTextMouseUp)
+      return
+    }
+
+    // Otherwise, start screenshot/region capture mode
     e.preventDefault()
 
     this.activePage = page
@@ -149,6 +169,95 @@ export class PdfSelectionOverlay {
     } else {
       this.cancelSelection()
     }
+  }
+
+  private onTextSelectionEnd(_e: MouseEvent) {
+    document.removeEventListener('mouseup', this.boundTextMouseUp)
+
+    if (!this.isTextSelecting) return
+    this.isTextSelecting = false
+
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed) {
+      this.resetTextSelectionState()
+      return
+    }
+
+    const text = selection.toString().trim()
+    if (!text) {
+      this.resetTextSelectionState()
+      return
+    }
+
+    const range = selection.getRangeAt(0)
+    void this.handleTextSelection(text, range)
+  }
+
+  private async handleTextSelection(text: string, range: Range) {
+    if (containsMathContent(text)) {
+      // Capture the selection region from the canvas for math conversion
+      const imageDataUrl = this.getSelectionCanvasCapture(range)
+      if (imageDataUrl) {
+        this.showLoadingIndicator(range)
+        try {
+          const convertedText = await this.onMathConversion(imageDataUrl)
+          this.onTextSelection(convertedText)
+        } catch (err) {
+          console.error('Math conversion failed, sending raw text:', err)
+          this.onTextSelection(text)
+        } finally {
+          this.removeLoadingIndicator()
+        }
+      } else {
+        // Fallback: send raw text if canvas capture fails
+        this.onTextSelection(text)
+      }
+    } else {
+      this.onTextSelection(text)
+    }
+
+    this.resetTextSelectionState()
+  }
+
+  private getSelectionCanvasCapture(range: Range): string | null {
+    if (!this.activeCanvas) return null
+
+    const rangeRect = range.getBoundingClientRect()
+    const canvasRect = this.activeCanvas.getBoundingClientRect()
+
+    const rect: SelectionRect = {
+      x: rangeRect.left - canvasRect.left - PADDING,
+      y: rangeRect.top - canvasRect.top - PADDING,
+      width: rangeRect.width + PADDING * 2,
+      height: rangeRect.height + PADDING * 2,
+    }
+
+    return captureCanvasRegion(this.activeCanvas, rect)
+  }
+
+  private showLoadingIndicator(range: Range) {
+    this.removeLoadingIndicator()
+
+    const rangeRect = range.getBoundingClientRect()
+    const indicator = document.createElement('div')
+    indicator.className = 'smtcmp-pdf-math-loading'
+    indicator.textContent = 'Converting math...'
+    indicator.style.left = `${rangeRect.left}px`
+    indicator.style.top = `${rangeRect.bottom + 4}px`
+    document.body.appendChild(indicator)
+    this.loadingIndicator = indicator
+  }
+
+  private removeLoadingIndicator() {
+    if (this.loadingIndicator) {
+      this.loadingIndicator.remove()
+      this.loadingIndicator = null
+    }
+  }
+
+  private resetTextSelectionState() {
+    this.activePage = null
+    this.activeCanvas = null
   }
 
   private onKeyDown(e: KeyboardEvent) {

@@ -40,6 +40,7 @@ import {
   MentionableBlockData,
   MentionableImage,
   MentionablePdf,
+  MentionablePdfText,
 } from '../../types/mentionable'
 import { ToolCallResponseStatus } from '../../types/tool-call.types'
 import { applyChangesToFile } from '../../utils/chat/apply'
@@ -77,6 +78,7 @@ export type ChatRef = {
   openNewChat: (selectedBlock?: MentionableBlockData) => void
   addSelectionToChat: (selectedBlock: MentionableBlockData) => void
   addImageToChat: (image: MentionableImage) => void
+  addPdfTextToChat: (text: string) => void
   focusMessage: () => void
 }
 
@@ -609,6 +611,17 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
           mentionables: [...prev.mentionables, image],
         }
       })
+    },
+    addPdfTextToChat: (text: string) => {
+      const pdfText: MentionablePdfText = {
+        type: 'pdf-text',
+        content: text,
+        sourceName: 'PDF Selection',
+      }
+      setInputMessage((prev) => ({
+        ...prev,
+        mentionables: [...prev.mentionables, pdfText],
+      }))
     },
     focusMessage: () => {
       if (!focusedMessageId) return

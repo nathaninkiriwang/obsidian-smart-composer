@@ -349,7 +349,9 @@ function MentionableContentPreview({
   const { data: displayFileContent } = useQuery({
     enabled:
       !!displayedMentionable &&
-      ['file', 'current-file', 'block'].includes(displayedMentionable.type),
+      ['file', 'current-file', 'block', 'pdf-text'].includes(
+        displayedMentionable.type,
+      ),
     queryKey: [
       'file',
       displayedMentionableKey,
@@ -376,6 +378,8 @@ function MentionableContentPreview({
             displayedMentionable.endLine,
           )
           .join('\n')
+      } else if (displayedMentionable.type === 'pdf-text') {
+        return displayedMentionable.content
       }
 
       return null
