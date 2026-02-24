@@ -1,4 +1,3 @@
-import * as Tooltip from '@radix-ui/react-tooltip'
 import { Check, CopyIcon } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
@@ -39,23 +38,13 @@ function CopyButton({ messages }: { messages: AssistantToolMessageGroup }) {
   }
 
   return (
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger asChild>
-          <button
-            onClick={copied ? undefined : handleCopy}
-            className="clickable-icon"
-          >
-            {copied ? <Check size={12} /> : <CopyIcon size={12} />}
-          </button>
-        </Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Content className="smtcmp-tooltip-content">
-            Copy message
-          </Tooltip.Content>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </Tooltip.Provider>
+    <button
+      onClick={copied ? undefined : handleCopy}
+      className="smtcmp-assistant-action-btn"
+    >
+      {copied ? <Check size={12} /> : <CopyIcon size={12} />}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
   )
 }
 
@@ -102,24 +91,11 @@ function LLMResponseInfoButton({
   }, [model, usage])
 
   return (
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger asChild>
-          <div>
-            <LLMResponseInfoPopover
-              usage={usage}
-              estimatedPrice={cost}
-              model={model?.model ?? null}
-            />
-          </div>
-        </Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Content className="smtcmp-tooltip-content">
-            View details
-          </Tooltip.Content>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </Tooltip.Provider>
+    <LLMResponseInfoPopover
+      usage={usage}
+      estimatedPrice={cost}
+      model={model?.model ?? null}
+    />
   )
 }
 
