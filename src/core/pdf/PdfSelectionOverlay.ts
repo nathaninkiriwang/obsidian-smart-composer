@@ -26,8 +26,6 @@ export class PdfSelectionOverlay {
   private boundMouseUp = (e: MouseEvent) => this.onMouseUp(e)
   private boundKeyDown = (e: KeyboardEvent) => this.onKeyDown(e)
   private boundTextMouseUp = (e: MouseEvent) => this.onTextSelectionEnd(e)
-  private boundToggleKey = (e: KeyboardEvent) => this.onToggleKey(e)
-
   constructor(
     private container: HTMLElement,
     private onCapture: (image: MentionableImage) => void,
@@ -36,7 +34,6 @@ export class PdfSelectionOverlay {
   ) {
     this.container.classList.add('smtcmp-pdf-capture-active')
     this.container.addEventListener('mousedown', this.boundMouseDown)
-    this.container.addEventListener('keydown', this.boundToggleKey)
     this.showModeBadge()
   }
 
@@ -47,7 +44,6 @@ export class PdfSelectionOverlay {
     this.container.classList.remove('smtcmp-pdf-capture-active')
     this.container.classList.remove('smtcmp-pdf-text-mode')
     this.container.removeEventListener('mousedown', this.boundMouseDown)
-    this.container.removeEventListener('keydown', this.boundToggleKey)
     document.removeEventListener('mousemove', this.boundMouseMove)
     document.removeEventListener('mouseup', this.boundMouseUp)
     document.removeEventListener('mouseup', this.boundTextMouseUp)
@@ -66,15 +62,6 @@ export class PdfSelectionOverlay {
       this.container.classList.remove('smtcmp-pdf-text-mode')
     }
     this.updateModeBadge()
-  }
-
-  private onToggleKey(e: KeyboardEvent) {
-    // Cmd+S (Mac) or Ctrl+S (Windows/Linux) to toggle mode
-    if (e.key === 's' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
-      e.preventDefault()
-      e.stopPropagation()
-      this.toggleMode()
-    }
   }
 
   private onMouseDown(e: MouseEvent) {

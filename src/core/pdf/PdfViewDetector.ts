@@ -36,6 +36,27 @@ export class PdfViewDetector {
     this.overlays.clear()
   }
 
+  /** Returns true if the active leaf is a PDF with an overlay. */
+  hasActivePdfOverlay(): boolean {
+    return this.getActiveOverlay() !== null
+  }
+
+  /** Toggle screenshot/text mode on the active PDF overlay. */
+  toggleActiveMode() {
+    this.getActiveOverlay()?.toggleMode()
+  }
+
+  private getActiveOverlay(): PdfSelectionOverlay | null {
+    const activeLeaf = this.workspace.activeLeaf
+    if (!activeLeaf || activeLeaf.view.getViewType() !== 'pdf') return null
+
+    const container =
+      activeLeaf.view.containerEl.querySelector('.pdf-container')
+    if (!(container instanceof HTMLElement)) return null
+
+    return this.overlays.get(container) ?? null
+  }
+
   private scan() {
     // Find all PDF view containers currently in the workspace
     const pdfContainers = new Set<HTMLElement>()
