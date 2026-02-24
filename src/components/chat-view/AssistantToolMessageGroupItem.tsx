@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import {
   AssistantToolMessageGroup,
   ChatMessage,
@@ -27,6 +29,8 @@ export default function AssistantToolMessageGroupItem({
   onApply,
   onToolMessageUpdate,
 }: AssistantToolMessageGroupItemProps) {
+  const [isRawMode, setIsRawMode] = useState(false)
+
   return (
     <div className="smtcmp-assistant-tool-message-group">
       {messages.map((message) =>
@@ -46,6 +50,7 @@ export default function AssistantToolMessageGroupItem({
                 contextMessages={contextMessages}
                 handleApply={onApply}
                 isApplying={isApplying}
+                isRawMode={isRawMode}
               />
             </div>
           ) : null
@@ -60,7 +65,14 @@ export default function AssistantToolMessageGroupItem({
         ),
       )}
       {messages.length > 0 && (
-        <AssistantToolMessageGroupActions messages={messages} />
+        <AssistantToolMessageGroupActions
+          messages={messages}
+          contextMessages={contextMessages}
+          isRawMode={isRawMode}
+          onToggleRawMode={() => setIsRawMode(!isRawMode)}
+          onApply={onApply}
+          isApplying={isApplying}
+        />
       )}
     </div>
   )

@@ -1,9 +1,10 @@
-import { Check, CopyIcon } from 'lucide-react'
+import { Check, CopyIcon, Eye, Loader2, Play } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import {
   AssistantToolMessageGroup,
   ChatAssistantMessage,
+  ChatMessage,
 } from '../../types/chat'
 import { ChatModel } from '../../types/chat-model.types'
 import { ResponseUsage } from '../../types/llm/response'
@@ -44,6 +45,71 @@ function CopyButton({ messages }: { messages: AssistantToolMessageGroup }) {
     >
       {copied ? <Check size={12} /> : <CopyIcon size={12} />}
       <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  )
+}
+
+function ViewRawButton({
+  isRawMode,
+  onToggle,
+}: {
+  isRawMode: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button onClick={onToggle} className="smtcmp-assistant-action-btn">
+      <Eye size={12} />
+      <span>{isRawMode ? 'View Formatted' : 'View Raw'}</span>
+    </button>
+  )
+}
+
+function ApplyButton({
+  messages,
+  contextMessages,
+  onApply,
+  isApplying,
+}: {
+  messages: AssistantToolMessageGroup
+  contextMessages: ChatMessage[]
+  onApply: (blockToApply: string, chatMessages: ChatMessage[]) => void
+  isApplying: boolean
+}) {
+  const content = useMemo(() => {
+    return messages
+      .map((message) => {
+        if (message.role === 'assistant' && message.content !== '') {
+          return message.content
+        }
+        return null
+      })
+      .filter(Boolean)
+      .join('\n\n')
+  }, [messages])
+
+  return (
+    <button
+      className="smtcmp-assistant-action-btn"
+      onClick={
+        isApplying
+          ? undefined
+          : () => {
+              onApply(content, contextMessages)
+            }
+      }
+      aria-disabled={isApplying}
+    >
+      {isApplying ? (
+        <>
+          <Loader2 className="spinner" size={12} />
+          <span>Applying...</span>
+        </>
+      ) : (
+        <>
+          <Play size={12} />
+          <span>Apply</span>
+        </>
+      )}
     </button>
   )
 }
@@ -101,13 +167,30 @@ function LLMResponseInfoButton({
 
 export default function AssistantToolMessageGroupActions({
   messages,
+  contextMessages,
+  isRawMode,
+  onToggleRawMode,
+  onApply,
+  isApplying,
 }: {
   messages: AssistantToolMessageGroup
+  contextMessages: ChatMessage[]
+  isRawMode: boolean
+  onToggleRawMode: () => void
+  onApply: (blockToApply: string, chatMessages: ChatMessage[]) => void
+  isApplying: boolean
 }) {
   return (
     <div className="smtcmp-assistant-message-actions">
       <LLMResponseInfoButton messages={messages} />
+      <ViewRawButton isRawMode={isRawMode} onToggle={onToggleRawMode} />
       <CopyButton messages={messages} />
+      <ApplyButton
+        messages={messages}
+        contextMessages={contextMessages}
+        onApply={onApply}
+        isApplying={isApplying}
+      />
     </div>
   )
 }

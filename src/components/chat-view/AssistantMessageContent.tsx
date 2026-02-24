@@ -16,11 +16,13 @@ export default function AssistantMessageContent({
   contextMessages,
   handleApply,
   isApplying,
+  isRawMode = false,
 }: {
   content: ChatAssistantMessage['content']
   contextMessages: ChatMessage[]
   handleApply: (blockToApply: string, chatMessages: ChatMessage[]) => void
   isApplying: boolean
+  isRawMode?: boolean
 }) {
   const onApply = useCallback(
     (blockToApply: string) => {
@@ -28,6 +30,12 @@ export default function AssistantMessageContent({
     },
     [handleApply, contextMessages],
   )
+
+  if (isRawMode) {
+    return (
+      <pre className="smtcmp-assistant-raw-text">{content}</pre>
+    )
+  }
 
   return (
     <AssistantTextRenderer onApply={onApply} isApplying={isApplying}>
