@@ -237,18 +237,23 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
           const mentionableKey = getMentionableKey(
             serializeMentionable(m),
           )
-          if (
-            (m.type === 'current-file' ||
-              m.type === 'file' ||
-              m.type === 'block') &&
-            m.file &&
-            mentionableKey === displayedMentionableKey
-          ) {
-            openMarkdownFile(
-              app,
-              m.file.path,
-              m.type === 'block' ? m.startLine : undefined,
-            )
+          if (mentionableKey === displayedMentionableKey) {
+            // Already showing preview — check if we should open the file or collapse
+            if (
+              (m.type === 'current-file' ||
+                m.type === 'file' ||
+                m.type === 'block') &&
+              m.file
+            ) {
+              openMarkdownFile(
+                app,
+                m.file.path,
+                m.type === 'block' ? m.startLine : undefined,
+              )
+            } else {
+              // Toggle: collapse the preview
+              setDisplayedMentionableKey(null)
+            }
           } else {
             setDisplayedMentionableKey(mentionableKey)
           }
