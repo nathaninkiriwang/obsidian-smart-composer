@@ -466,7 +466,7 @@ ${await this.getWebsiteContent(url)}
 
 2. Do not lie or make up facts.
 
-3. Format your response in markdown.
+3. Format your response in markdown. When including mathematical expressions or LaTeX, always use dollar-sign delimiters: $...$ for inline math and $$...$$ for display math. Never use \\(...\\) or \\[...\\] delimiters.
 
 ${
   modelPromptLevel == PromptLevel.Default
@@ -502,7 +502,7 @@ The user has full access to the file, so they prefer seeing only the changes in 
       
 1. Do not lie or make up facts.
 
-2. Format your response in markdown.
+2. Format your response in markdown. When including mathematical expressions or LaTeX, always use dollar-sign delimiters: $...$ for inline math and $$...$$ for display math. Never use \\(...\\) or \\[...\\] delimiters.
 
 ${
   modelPromptLevel == PromptLevel.Default
