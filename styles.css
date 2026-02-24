@@ -244,6 +244,18 @@
   background: var(--background-secondary);
   border-color: #B0B0B0;
   color: #767676;
+
+  &:hover {
+    border-color: #B0B0B0;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  &:focus-within,
+  &:focus,
+  &:focus-visible,
+  &:active {
+    border-color: #B0B0B0;
+  }
 }
 
 .smtcmp-chat-user-input-container--compact .obsidian-default-textarea {
