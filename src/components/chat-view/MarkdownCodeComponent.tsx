@@ -1,5 +1,4 @@
-import { Check, CopyIcon, Eye, Loader2, Play } from 'lucide-react'
-import { PropsWithChildren, useMemo, useState } from 'react'
+import { PropsWithChildren, useMemo } from 'react'
 
 import { useApp } from '../../contexts/app-context'
 import { useDarkModeContext } from '../../contexts/dark-mode-context'
@@ -9,36 +8,21 @@ import { ObsidianMarkdown } from './ObsidianMarkdown'
 import { MemoizedSyntaxHighlighterWrapper } from './SyntaxHighlighterWrapper'
 
 export default function MarkdownCodeComponent({
-  onApply,
-  isApplying,
   language,
   filename,
   children,
+  isRawMode = false,
 }: PropsWithChildren<{
-  onApply: (blockToApply: string) => void
-  isApplying: boolean
   language?: string
   filename?: string
+  isRawMode?: boolean
 }>) {
   const app = useApp()
   const { isDarkMode } = useDarkModeContext()
 
-  const [isPreviewMode, setIsPreviewMode] = useState(true)
-  const [copied, setCopied] = useState(false)
-
   const wrapLines = useMemo(() => {
     return !language || ['markdown'].includes(language)
   }, [language])
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(String(children))
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('Failed to copy text: ', err)
-    }
-  }
 
   const handleOpenFile = () => {
     if (filename) {
@@ -58,11 +42,7 @@ export default function MarkdownCodeComponent({
           </div>
         </div>
       )}
-      {isPreviewMode ? (
-        <div className="smtcmp-code-block-obsidian-markdown">
-          <ObsidianMarkdown content={String(children)} scale="sm" />
-        </div>
-      ) : (
+      {isRawMode ? (
         <MemoizedSyntaxHighlighterWrapper
           isDarkMode={isDarkMode}
           language={language}
@@ -71,61 +51,11 @@ export default function MarkdownCodeComponent({
         >
           {String(children)}
         </MemoizedSyntaxHighlighterWrapper>
-      )}
-      <div className="smtcmp-code-block-footer">
-        <div className="smtcmp-code-block-header-button-container">
-          <button
-            className="clickable-icon smtcmp-code-block-header-button"
-            onClick={() => {
-              setIsPreviewMode(!isPreviewMode)
-            }}
-          >
-            <Eye size={12} />
-            {isPreviewMode ? 'View Raw Text' : 'View Formatted'}
-          </button>
-          <button
-            className="clickable-icon smtcmp-code-block-header-button"
-            onClick={() => {
-              handleCopy()
-            }}
-          >
-            {copied ? (
-              <>
-                <Check size={10} />
-                <span>Copied</span>
-              </>
-            ) : (
-              <>
-                <CopyIcon size={10} />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-          <button
-            className="clickable-icon smtcmp-code-block-header-button"
-            onClick={
-              isApplying
-                ? undefined
-                : () => {
-                    onApply(String(children))
-                  }
-            }
-            aria-disabled={isApplying}
-          >
-            {isApplying ? (
-              <>
-                <Loader2 className="spinner" size={14} />
-                <span>Applying...</span>
-              </>
-            ) : (
-              <>
-                <Play size={10} />
-                <span>Apply</span>
-              </>
-            )}
-          </button>
+      ) : (
+        <div className="smtcmp-code-block-obsidian-markdown">
+          <ObsidianMarkdown content={String(children)} scale="sm" />
         </div>
-      </div>
+      )}
     </div>
   )
 }

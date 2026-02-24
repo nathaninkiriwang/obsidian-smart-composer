@@ -47,9 +47,6 @@ export default function AssistantToolMessageGroupItem({
               )}
               <AssistantMessageContent
                 content={message.content}
-                contextMessages={contextMessages}
-                handleApply={onApply}
-                isApplying={isApplying}
                 isRawMode={isRawMode}
               />
             </div>
