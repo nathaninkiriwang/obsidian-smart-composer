@@ -186,21 +186,6 @@ export default class SmartComposerPlugin extends Plugin {
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new SmartComposerSettingTab(this.app, this))
 
-    this.addCommand({
-      id: 'toggle-pdf-text-mode',
-      name: 'Toggle PDF text selection mode',
-      checkCallback: (checking: boolean) => {
-        if (this.pdfViewDetector?.hasActivePdfOverlay()) {
-          if (!checking) {
-            this.pdfViewDetector?.toggleActiveMode()
-          }
-          return true
-        }
-        return false
-      },
-      hotkeys: [{ modifiers: ['Mod'], key: 's' }],
-    })
-
     // Initialize PDF region capture overlay
     this.app.workspace.onLayoutReady(() => {
       this.pdfViewDetector = new PdfViewDetector(

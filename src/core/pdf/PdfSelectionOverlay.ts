@@ -290,9 +290,9 @@ export class PdfSelectionOverlay {
   private updateModeBadge() {
     if (!this.modeBadge) return
     if (this.mode === 'screenshot') {
-      this.modeBadge.textContent = 'Screenshot mode (Cmd+S to select text)'
+      this.modeBadge.textContent = 'Screenshot mode (Ctrl+S to select text)'
     } else {
-      this.modeBadge.textContent = 'Text select mode (Cmd+S for screenshot)'
+      this.modeBadge.textContent = 'Text select mode (Ctrl+S for screenshot)'
     }
   }
 

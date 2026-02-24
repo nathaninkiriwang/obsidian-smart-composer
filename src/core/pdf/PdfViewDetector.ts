@@ -8,6 +8,8 @@ export class PdfViewDetector {
   private overlays: Map<HTMLElement, PdfSelectionOverlay> = new Map()
   private cleanupFns: (() => void)[] = []
 
+  private boundKeyDown = (e: KeyboardEvent) => this.onKeyDown(e)
+
   constructor(
     private workspace: Workspace,
     private onCapture: (image: MentionableImage) => void,
@@ -20,9 +22,13 @@ export class PdfViewDetector {
     this.workspace.on('layout-change', layoutCb)
     this.workspace.on('active-leaf-change', leafCb)
 
+    // Listen in capture phase so we intercept before Obsidian's "Save" handler
+    document.addEventListener('keydown', this.boundKeyDown, true)
+
     this.cleanupFns.push(() => {
       this.workspace.off('layout-change', layoutCb)
       this.workspace.off('active-leaf-change', leafCb)
+      document.removeEventListener('keydown', this.boundKeyDown, true)
     })
 
     // Initial scan
@@ -44,6 +50,18 @@ export class PdfViewDetector {
   /** Toggle screenshot/text mode on the active PDF overlay. */
   toggleActiveMode() {
     this.getActiveOverlay()?.toggleMode()
+  }
+
+  private onKeyDown(e: KeyboardEvent) {
+    // Cmd+S (Mac) or Ctrl+S (Windows/Linux), no shift, no alt
+    if (e.key === 's' && e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+      const overlay = this.getActiveOverlay()
+      if (overlay) {
+        e.preventDefault()
+        e.stopPropagation()
+        overlay.toggleMode()
+      }
+    }
   }
 
   private getActiveOverlay(): PdfSelectionOverlay | null {
