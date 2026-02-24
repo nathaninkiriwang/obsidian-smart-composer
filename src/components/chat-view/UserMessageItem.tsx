@@ -33,6 +33,7 @@ export default function UserMessageItem({
         onFocus={onFocus}
         mentionables={message.mentionables}
         setMentionables={onMentionablesChange}
+        compact
       />
       {message.similaritySearchResults && (
         <SimilaritySearchResults

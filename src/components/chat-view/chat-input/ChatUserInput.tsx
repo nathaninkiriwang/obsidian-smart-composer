@@ -49,6 +49,7 @@ export type ChatUserInputProps = {
   setMentionables: (mentionables: Mentionable[]) => void
   autoFocus?: boolean
   addedBlockKey?: string | null
+  compact?: boolean
 }
 
 const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
@@ -62,6 +63,7 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
       setMentionables,
       autoFocus = false,
       addedBlockKey,
+      compact = false,
     },
     ref,
   ) => {
@@ -272,7 +274,10 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
             {pdfMentionables.map(renderBadge)}
           </div>
         )}
-        <div className="smtcmp-chat-user-input-container" ref={containerRef}>
+        <div
+          className={`smtcmp-chat-user-input-container${compact ? ' smtcmp-chat-user-input-container--compact' : ''}`}
+          ref={containerRef}
+        >
           {otherMentionables.length > 0 && (
             <div className="smtcmp-chat-user-input-files">
               {otherMentionables.map(renderBadge)}
@@ -312,20 +317,22 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
             }}
           />
 
-          <div className="smtcmp-chat-user-input-controls">
-            <div className="smtcmp-chat-user-input-controls__model-select-container">
-              <ModelSelect />
+          {!compact && (
+            <div className="smtcmp-chat-user-input-controls">
+              <div className="smtcmp-chat-user-input-controls__model-select-container">
+                <ModelSelect />
+              </div>
+              <div className="smtcmp-chat-user-input-controls__buttons">
+                <ImageUploadButton onUpload={handleUploadImages} />
+                <SubmitButton onClick={() => handleSubmit()} />
+                <VaultChatButton
+                  onClick={() => {
+                    handleSubmit({ useVaultSearch: true })
+                  }}
+                />
+              </div>
             </div>
-            <div className="smtcmp-chat-user-input-controls__buttons">
-              <ImageUploadButton onUpload={handleUploadImages} />
-              <SubmitButton onClick={() => handleSubmit()} />
-              <VaultChatButton
-                onClick={() => {
-                  handleSubmit({ useVaultSearch: true })
-                }}
-              />
-            </div>
-          </div>
+          )}
         </div>
       </div>
     )

@@ -214,7 +214,7 @@
   display: flex;
   flex-direction: column;
   -webkit-app-region: no-drag;
-  background: var(--background-modifier-form-field);
+  background: color-mix(in srgb, var(--background-primary) 70%, var(--background-secondary) 30%);
   border: 1px solid var(--background-modifier-border);
   color: var(--text-normal);
   font-family: inherit;
@@ -228,11 +228,6 @@
 
   &:hover {
     border-color: var(--background-modifier-border-hover);
-    background-color: color-mix(
-      in srgb,
-      var(--background-modifier-form-field) 92%,
-      var(--text-faint)
-    );
   }
 
   &:focus-within,
@@ -241,6 +236,11 @@
   &:active {
     border-color: var(--interactive-accent);
   }
+}
+
+/* Compact variant for history messages — no controls, tighter padding */
+.smtcmp-chat-user-input-container--compact {
+  padding: var(--size-2-2) var(--size-2-3);
 }
 
 .smtcmp-chat-user-input-files {
