@@ -2907,12 +2907,22 @@ button.smtcmp-chat-input-model-select {
 
 /* PDF region capture */
 
-.smtcmp-pdf-capture-active .page canvas {
+/* Default: screenshot mode — crosshair everywhere */
+.smtcmp-pdf-capture-active {
   cursor: crosshair;
 }
 
 .smtcmp-pdf-capture-active .textLayer {
+  pointer-events: none;
+}
+
+/* Text select mode — text cursor, text layer is interactive */
+.smtcmp-pdf-capture-active.smtcmp-pdf-text-mode {
   cursor: text;
+}
+
+.smtcmp-pdf-capture-active.smtcmp-pdf-text-mode .textLayer {
+  pointer-events: auto;
 }
 
 .smtcmp-pdf-selection-rect {
@@ -2943,4 +2953,19 @@ button.smtcmp-chat-input-model-select {
 @keyframes smtcmp-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+.smtcmp-pdf-mode-badge {
+  position: sticky;
+  top: 4px;
+  z-index: 100;
+  margin: 0 auto;
+  width: fit-content;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  pointer-events: none;
+  opacity: 0.8;
 }

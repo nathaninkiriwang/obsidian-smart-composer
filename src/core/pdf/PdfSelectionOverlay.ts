@@ -7,6 +7,8 @@ const MIN_SELECTION_SIZE = 10
 const PAGE_SELECTOR = '.page'
 const PADDING = 4
 
+export type PdfInteractionMode = 'screenshot' | 'text'
+
 export class PdfSelectionOverlay {
   private selectionRectEl: HTMLDivElement | null = null
   private isDragging = false
@@ -16,12 +18,15 @@ export class PdfSelectionOverlay {
   private activeCanvas: HTMLCanvasElement | null = null
   private captureCount = 0
   private loadingIndicator: HTMLDivElement | null = null
+  private mode: PdfInteractionMode = 'screenshot'
+  private modeBadge: HTMLDivElement | null = null
 
   private boundMouseDown = (e: MouseEvent) => this.onMouseDown(e)
   private boundMouseMove = (e: MouseEvent) => this.onMouseMove(e)
   private boundMouseUp = (e: MouseEvent) => this.onMouseUp(e)
   private boundKeyDown = (e: KeyboardEvent) => this.onKeyDown(e)
   private boundTextMouseUp = (e: MouseEvent) => this.onTextSelectionEnd(e)
+  private boundToggleKey = (e: KeyboardEvent) => this.onToggleKey(e)
 
   constructor(
     private container: HTMLElement,
@@ -31,17 +36,45 @@ export class PdfSelectionOverlay {
   ) {
     this.container.classList.add('smtcmp-pdf-capture-active')
     this.container.addEventListener('mousedown', this.boundMouseDown)
+    this.container.addEventListener('keydown', this.boundToggleKey)
+    this.showModeBadge()
   }
 
   destroy() {
     this.cancelSelection()
     this.removeLoadingIndicator()
+    this.removeModeBadge()
     this.container.classList.remove('smtcmp-pdf-capture-active')
+    this.container.classList.remove('smtcmp-pdf-text-mode')
     this.container.removeEventListener('mousedown', this.boundMouseDown)
+    this.container.removeEventListener('keydown', this.boundToggleKey)
     document.removeEventListener('mousemove', this.boundMouseMove)
     document.removeEventListener('mouseup', this.boundMouseUp)
     document.removeEventListener('mouseup', this.boundTextMouseUp)
     document.removeEventListener('keydown', this.boundKeyDown)
+  }
+
+  toggleMode() {
+    this.setMode(this.mode === 'screenshot' ? 'text' : 'screenshot')
+  }
+
+  private setMode(mode: PdfInteractionMode) {
+    this.mode = mode
+    if (mode === 'text') {
+      this.container.classList.add('smtcmp-pdf-text-mode')
+    } else {
+      this.container.classList.remove('smtcmp-pdf-text-mode')
+    }
+    this.updateModeBadge()
+  }
+
+  private onToggleKey(e: KeyboardEvent) {
+    // Cmd+S (Mac) or Ctrl+S (Windows/Linux) to toggle mode
+    if (e.key === 's' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+      e.preventDefault()
+      e.stopPropagation()
+      this.toggleMode()
+    }
   }
 
   private onMouseDown(e: MouseEvent) {
@@ -57,8 +90,8 @@ export class PdfSelectionOverlay {
     const canvas = page.querySelector('canvas')
     if (!(canvas instanceof HTMLCanvasElement)) return
 
-    // If clicking inside the text layer, allow native text selection
-    if (target.closest('.textLayer')) {
+    // In text mode, allow native text selection
+    if (this.mode === 'text') {
       this.isTextSelecting = true
       this.activePage = page
       this.activeCanvas = canvas
@@ -67,7 +100,7 @@ export class PdfSelectionOverlay {
       return
     }
 
-    // Otherwise, start screenshot/region capture mode
+    // Screenshot mode: start region capture
     e.preventDefault()
 
     this.activePage = page
@@ -216,6 +249,8 @@ export class PdfSelectionOverlay {
       this.onTextSelection(text)
     }
 
+    // Revert to screenshot mode after text selection completes
+    this.setMode('screenshot')
     this.resetTextSelectionState()
   }
 
@@ -252,6 +287,32 @@ export class PdfSelectionOverlay {
     if (this.loadingIndicator) {
       this.loadingIndicator.remove()
       this.loadingIndicator = null
+    }
+  }
+
+  private showModeBadge() {
+    this.removeModeBadge()
+
+    const badge = document.createElement('div')
+    badge.className = 'smtcmp-pdf-mode-badge'
+    this.container.appendChild(badge)
+    this.modeBadge = badge
+    this.updateModeBadge()
+  }
+
+  private updateModeBadge() {
+    if (!this.modeBadge) return
+    if (this.mode === 'screenshot') {
+      this.modeBadge.textContent = 'Screenshot mode (Cmd+S to select text)'
+    } else {
+      this.modeBadge.textContent = 'Text select mode (Cmd+S for screenshot)'
+    }
+  }
+
+  private removeModeBadge() {
+    if (this.modeBadge) {
+      this.modeBadge.remove()
+      this.modeBadge = null
     }
   }
 
