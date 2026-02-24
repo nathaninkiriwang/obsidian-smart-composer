@@ -243,13 +243,14 @@
   padding: var(--size-2-2) var(--size-2-3);
   background: var(--background-secondary);
   border-color: #B0B0B0;
-  color: #808080;
+  color: #767676;
 }
 
 .smtcmp-chat-user-input-container--compact .obsidian-default-textarea {
   min-height: unset;
   max-height: unset;
   overflow-y: visible;
+  color: #767676;
 }
 
 .smtcmp-chat-user-input-files {
