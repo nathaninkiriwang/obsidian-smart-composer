@@ -8,6 +8,7 @@ import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE, LIBRARY_VIEW_TYPE } from './constants'
 import { getChatModelClient } from './core/llm/manager'
 import { McpManager } from './core/mcp/mcpManager'
 import { PaperSelectionStore } from './core/paper-selection/store'
+import { PdfMdToggle } from './core/pdf/PdfMdToggle'
 import { PdfViewDetector } from './core/pdf/PdfViewDetector'
 import { RAGEngine } from './core/rag/ragEngine'
 import { ZoteroClient } from './core/zotero/zoteroClient'
@@ -36,6 +37,7 @@ export default class SmartComposerPlugin extends Plugin {
   zoteroSync: ZoteroSync | null = null
   paperSelection: PaperSelectionStore = new PaperSelectionStore()
   private pdfViewDetector: PdfViewDetector | null = null
+  private pdfMdToggle: PdfMdToggle | null = null
   private dbManagerInitPromise: Promise<DatabaseManager> | null = null
   private ragEngineInitPromise: Promise<RAGEngine> | null = null
   private timeoutIds: ReturnType<typeof setTimeout>[] = [] // Use ReturnType instead of number
@@ -194,6 +196,7 @@ export default class SmartComposerPlugin extends Plugin {
         (text) => this.addPdfTextToChat(text),
         (imageDataUrl) => this.convertMathImage(imageDataUrl),
       )
+      this.pdfMdToggle = new PdfMdToggle(this.app, () => this.settings)
     })
 
     void this.migrateToJsonStorage()
@@ -223,6 +226,10 @@ export default class SmartComposerPlugin extends Plugin {
     // PDF overlay cleanup
     this.pdfViewDetector?.destroy()
     this.pdfViewDetector = null
+
+    // PDF/markdown toggle button cleanup
+    this.pdfMdToggle?.destroy()
+    this.pdfMdToggle = null
 
     // Zotero cleanup
     this.zoteroSync?.cleanup()
