@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../../contexts/app-context'
 import { usePlugin } from '../../contexts/plugin-context'
 import { useSettings } from '../../contexts/settings-context'
-import { buildFilenameMap } from '../../core/zotero/pdfNaming'
+import { buildCitekeyFilenameMap, buildFilenameMap } from '../../core/zotero/pdfNaming'
 import { usePaperSelection } from '../../hooks/usePaperSelection'
 import { PaperMetadata } from '../../types/zotero.types'
 
@@ -75,8 +75,14 @@ export function LibraryPane() {
         await client.fetchItemsWithAttachments(collectionKey)
       const fileIndex = buildFileIndex()
 
-      // Build collision-handled filename map (fallback for before first sync)
-      const filenameMap = buildFilenameMap(items)
+      // Build filename map (fallback for before first background sync).
+      // In citekey mode this is resolved directly here rather than waiting
+      // on the background sync's 30s poll, since the PDFs are typically
+      // already present (placed there independently, e.g. via ZotMoov).
+      const filenameMap =
+        settings.zotero.pdfNamingScheme === 'citekey'
+          ? await buildCitekeyFilenameMap(items, (key) => client.getCitekey(key))
+          : buildFilenameMap(items)
 
       // Get synced paths from latest sync (primary lookup)
       const syncedPaths = plugin.zoteroSync?.getSyncedPaths()
@@ -84,7 +90,7 @@ export function LibraryPane() {
       const paperList: PaperMetadata[] = []
       for (const item of items) {
         const attachment = attachmentMap.get(item.key)
-        if (!attachment?.data.filename) {
+        if (!attachment) {
           paperList.push(client.buildPaperMetadata(item, ''))
           continue
         }
@@ -131,7 +137,13 @@ export function LibraryPane() {
       setLoading(false)
       fetchingRef.current = false
     }
-  }, [plugin.zoteroClient, plugin.zoteroSync, selectedCollection, buildFileIndex])
+  }, [
+    plugin.zoteroClient,
+    plugin.zoteroSync,
+    selectedCollection,
+    buildFileIndex,
+    settings.zotero.pdfNamingScheme,
+  ])
 
   // Fetch on mount and when collection or refreshKey changes
   useEffect(() => {

@@ -122,12 +122,52 @@ export class PromptGenerator {
       new Map(pdfMentionables.map((p) => [p.zoteroKey, p])).values(),
     )
 
-    // Prepare PDF tools if any PDF mentionables exist
+    // If a pre-extracted markdown counterpart exists for a paper
+    // (raw/markdown/<citekey>/<citekey>.md), prefer reading that directly
+    // over PDF tool-calling extraction.
+    const markdownVaultPath = this.settings.zotero.markdownVaultPath
+    const markdownBackedPdfs: { paper: MentionablePdf; content: string }[] =
+      []
+    const toolBackedPdfs: MentionablePdf[] = []
+    if (markdownVaultPath) {
+      for (const paper of uniquePdfs) {
+        const citekey = paper.file.basename
+        const mdPath = `${markdownVaultPath}/${citekey}/${citekey}.md`
+        const mdFile = this.app.vault.getAbstractFileByPath(mdPath)
+        if (mdFile instanceof TFile) {
+          markdownBackedPdfs.push({
+            paper,
+            content: await readTFileContent(mdFile, this.app.vault),
+          })
+        } else {
+          toolBackedPdfs.push(paper)
+        }
+      }
+    } else {
+      toolBackedPdfs.push(...uniquePdfs)
+    }
+
+    let markdownPdfSystemMessage: RequestMessage | null = null
+    if (markdownBackedPdfs.length > 0) {
+      const sections = markdownBackedPdfs
+        .map(
+          ({ paper, content }) =>
+            `### ${paper.title}\n\n${content}`,
+        )
+        .join('\n\n---\n\n')
+      markdownPdfSystemMessage = {
+        role: 'system',
+        content: `The following papers are provided in full as pre-extracted markdown (OCR'd from the source PDF). Treat this as the paper's content directly — no tool calls needed to read it.\n\n${sections}`,
+      }
+    }
+
+    // Prepare PDF tools for any remaining PDF mentionables without a
+    // markdown counterpart yet
     let pdfSystemMessage: RequestMessage | null = null
     let pdfTools: import('../../types/llm/request').RequestTool[] | undefined
-    if (uniquePdfs.length > 0 && this.pdfToolProvider) {
+    if (toolBackedPdfs.length > 0 && this.pdfToolProvider) {
       const { tools, systemMessage: pdfMsg } =
-        await this.pdfToolProvider.preparePdfTools(uniquePdfs)
+        await this.pdfToolProvider.preparePdfTools(toolBackedPdfs)
       if (tools.length > 0) {
         pdfTools = tools
         pdfSystemMessage = {
@@ -139,6 +179,7 @@ export class PromptGenerator {
 
     const requestMessages: RequestMessage[] = [
       systemMessage,
+      ...(markdownPdfSystemMessage ? [markdownPdfSystemMessage] : []),
       ...(pdfSystemMessage ? [pdfSystemMessage] : []),
       ...(customInstructionMessage ? [customInstructionMessage] : []),
       ...(currentFileMessage ? [currentFileMessage] : []),

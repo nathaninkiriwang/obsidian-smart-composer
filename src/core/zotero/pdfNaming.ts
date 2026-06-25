@@ -2,8 +2,37 @@ import { ZoteroItem } from '../../types/zotero.types'
 
 import { extractYear, getAuthorLastNames } from './zoteroClient'
 
-function sanitizeFilename(name: string): string {
+export function sanitizeFilename(name: string): string {
   return name.replace(/[/\\:*?"<>|]/g, '-').trim()
+}
+
+export function buildCitekeyFilename(citekey: string): string {
+  return `${sanitizeFilename(citekey)}.pdf`
+}
+
+/**
+ * Pre-compute citekey-based filenames for all items, fetching each item's
+ * Better BibTeX citekey in parallel. Items without a resolvable citekey fall
+ * back to the author-year naming scheme so nothing is silently dropped.
+ */
+export async function buildCitekeyFilenameMap(
+  items: ZoteroItem[],
+  getCitekey: (itemKey: string) => Promise<string | null>,
+): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
+  await Promise.all(
+    items.map(async (item) => {
+      const citekey = await getCitekey(item.key)
+      if (citekey) {
+        result.set(item.key, buildCitekeyFilename(citekey))
+        return
+      }
+      const authors = getAuthorLastNames(item.data.creators)
+      const year = extractYear(item.data.date)
+      result.set(item.key, buildPdfFilename(authors, year, item.data.title))
+    }),
+  )
+  return result
 }
 
 export function buildPdfDisplayName(

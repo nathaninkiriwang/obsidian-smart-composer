@@ -269,7 +269,9 @@ export class ZoteroClient {
       if (data.itemType === 'attachment') {
         if (
           data.contentType === 'application/pdf' &&
-          data.filename &&
+          // linked_file attachments (e.g. ZotMoov-managed) have no
+          // `filename`, only `path` — still count as a PDF attachment.
+          (data.filename || data.path) &&
           data.parentItem
         ) {
           attachmentMap.set(
@@ -307,6 +309,17 @@ export class ZoteroClient {
       throw new Error(`Zotero API error: ${response.status}`)
     }
     return response.body
+  }
+
+  /** Returns the Better BibTeX citekey for an item, or null if unavailable. */
+  async getCitekey(itemKey: string): Promise<string | null> {
+    try {
+      const bibtex = await this.getItemBibtex(itemKey)
+      const match = bibtex.match(/@\w+\{([^,]+),/)
+      return match ? match[1] : null
+    } catch {
+      return null
+    }
   }
 
   buildPaperMetadata(

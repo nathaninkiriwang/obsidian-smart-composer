@@ -97,6 +97,15 @@ export const smartComposerSettingsSchema = z.object({
       libraryVaultPath: z.string(),
       selectedCollection: z.string(),
       pdfExtractionModelId: z.string(),
+      // 'author-year' (default): copies PDFs into per-collection subfolders under
+      // libraryVaultPath, named "Author et al. Year.pdf", and prunes orphans.
+      // 'citekey': flat sync into libraryVaultPath using the Better BibTeX citekey
+      // as the filename; never deletes anything (folder may be hand-curated).
+      pdfNamingScheme: z.enum(['author-year', 'citekey']).catch('author-year'),
+      // When set (citekey mode only), AI requests for a paper read the
+      // pre-extracted markdown at `${markdownVaultPath}/<citekey>/<citekey>.md`
+      // instead of using PDF tool-calling extraction. Empty disables this.
+      markdownVaultPath: z.string().catch(''),
     })
     .catch({
       apiBaseUrl: ZOTERO_DEFAULT_API_BASE_URL,
@@ -104,6 +113,8 @@ export const smartComposerSettingsSchema = z.object({
       libraryVaultPath: 'Library',
       selectedCollection: '',
       pdfExtractionModelId: '',
+      pdfNamingScheme: 'author-year',
+      markdownVaultPath: '',
     }),
 })
 export type SmartComposerSettings = z.infer<typeof smartComposerSettingsSchema>

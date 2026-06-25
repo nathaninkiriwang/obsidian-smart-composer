@@ -6,7 +6,7 @@ import { App, Notice, Platform, TFile, TFolder, normalizePath } from 'obsidian'
 import { SmartComposerSettings } from '../../settings/schema/setting.types'
 import { CollectionTreeNode, ZoteroItem } from '../../types/zotero.types'
 
-import { buildFilenameMap } from './pdfNaming'
+import { buildCitekeyFilenameMap, buildFilenameMap } from './pdfNaming'
 import {
   ZoteroClient,
   buildCollectionTree,
@@ -70,17 +70,30 @@ export class ZoteroSync {
     }
     this.syncing = true
 
-    try {
-      onProgress?.('Fetching collections from Zotero...')
-      const collections = await this.client.fetchCollections()
-      const libraryPath = this.getLibraryVaultPath()
-      const tree = buildCollectionTree(collections, libraryPath)
-      const flatNodes = flattenCollectionTree(tree)
+    const citekeyMode = this.settings.zotero.pdfNamingScheme === 'citekey'
 
-      // Build collectionKey → vaultPath map
+    try {
+      const libraryPath = this.getLibraryVaultPath()
       const collectionPathMap = new Map<string, string>()
-      for (const node of flatNodes) {
-        collectionPathMap.set(node.key, node.path)
+
+      if (!citekeyMode) {
+        onProgress?.('Fetching collections from Zotero...')
+        const collections = await this.client.fetchCollections()
+        const tree = buildCollectionTree(collections, libraryPath)
+        const flatNodes = flattenCollectionTree(tree)
+
+        // Build collectionKey → vaultPath map
+        for (const node of flatNodes) {
+          collectionPathMap.set(node.key, node.path)
+        }
+
+        // Ensure all collection folders exist
+        for (const node of flatNodes) {
+          await this.ensureFolder(node.path)
+        }
+
+        // Ensure _Unsorted folder
+        await this.ensureFolder(`${libraryPath}/_Unsorted`)
       }
 
       onProgress?.('Fetching items from Zotero...')
@@ -89,20 +102,16 @@ export class ZoteroSync {
       // Ensure base library folder exists
       await this.ensureFolder(libraryPath)
 
-      // Ensure all collection folders exist
-      for (const node of flatNodes) {
-        await this.ensureFolder(node.path)
-      }
-
-      // Ensure _Unsorted folder
-      await this.ensureFolder(`${libraryPath}/_Unsorted`)
-
       const storagePath = this.getZoteroStoragePath()
       let synced = 0
       const total = items.length
 
       // Pre-compute target filenames with collision handling
-      const filenameMap = buildFilenameMap(items)
+      const filenameMap = citekeyMode
+        ? await buildCitekeyFilenameMap(items, (key) =>
+            this.client.getCitekey(key),
+          )
+        : buildFilenameMap(items)
 
       // Track all expected PDF paths so we can remove orphans afterwards
       const expectedPaths = new Set<string>()
@@ -118,7 +127,9 @@ export class ZoteroSync {
         if (!newFilename) continue
 
         try {
-          const paths = await this.syncItem(item, storagePath, collectionPathMap, libraryPath, newFilename)
+          const paths = citekeyMode
+            ? await this.syncItem(item, storagePath, collectionPathMap, libraryPath, newFilename, [libraryPath])
+            : await this.syncItem(item, storagePath, collectionPathMap, libraryPath, newFilename)
           for (const p of paths) {
             expectedPaths.add(p)
           }
@@ -133,11 +144,14 @@ export class ZoteroSync {
 
       this._syncedPaths = newSyncedPaths
 
-      // Remove vault PDFs that are no longer in Zotero
-      onProgress?.('Cleaning up removed papers...')
-      const removed = await this.removeOrphanedFiles(libraryPath, expectedPaths)
-      if (removed > 0) {
-        onProgress?.(`Removed ${removed} orphaned PDF(s)`)
+      // citekey mode targets a hand-curated folder (e.g. may contain an
+      // _orphaned subfolder) — never auto-delete files there.
+      if (!citekeyMode) {
+        onProgress?.('Cleaning up removed papers...')
+        const removed = await this.removeOrphanedFiles(libraryPath, expectedPaths)
+        if (removed > 0) {
+          onProgress?.(`Removed ${removed} orphaned PDF(s)`)
+        }
       }
 
       onProgress?.(`Sync complete: ${synced}/${total} papers synced`)
@@ -154,7 +168,20 @@ export class ZoteroSync {
     collectionPathMap: Map<string, string>,
     libraryPath: string,
     newFilename: string,
+    forcedDestFolders?: string[],
   ): Promise<string[]> {
+    // Citekey mode targets a hand-curated, flat folder that may already
+    // contain the PDF (placed there independently of Zotero's own attachment
+    // storage, e.g. by ZotMoov renaming to {{citationKey}}.pdf on another
+    // device). If it's already there, recognize it immediately rather than
+    // trying to resolve/copy it from Zotero's internal storage.
+    if (forcedDestFolders) {
+      const destPath = normalizePath(`${forcedDestFolders[0]}/${newFilename}`)
+      if (this.app.vault.getAbstractFileByPath(destPath)) {
+        return [destPath]
+      }
+    }
+
     // Find PDF attachment
     const attachments = await this.client.fetchAttachments(item.key)
     const pdfAttachment = attachments.find(
@@ -180,22 +207,28 @@ export class ZoteroSync {
     const sourceStats = fs.statSync(sourcePath)
     const originalFilename = pdfAttachment.data.filename
 
-    // Determine destination folders based on collections
-    const collectionKeys = item.data.collections ?? []
-    const destFolders: string[] = []
-
-    if (collectionKeys.length === 0) {
-      destFolders.push(`${libraryPath}/_Unsorted`)
+    // Determine destination folders based on collections (or a forced flat
+    // target in citekey mode)
+    let destFolders: string[]
+    if (forcedDestFolders) {
+      destFolders = forcedDestFolders
     } else {
-      for (const key of collectionKeys) {
-        const folderPath = collectionPathMap.get(key)
-        if (folderPath) {
-          destFolders.push(folderPath)
-        }
-      }
-      // If none of the collection keys mapped (orphaned), use _Unsorted
-      if (destFolders.length === 0) {
+      const collectionKeys = item.data.collections ?? []
+      destFolders = []
+
+      if (collectionKeys.length === 0) {
         destFolders.push(`${libraryPath}/_Unsorted`)
+      } else {
+        for (const key of collectionKeys) {
+          const folderPath = collectionPathMap.get(key)
+          if (folderPath) {
+            destFolders.push(folderPath)
+          }
+        }
+        // If none of the collection keys mapped (orphaned), use _Unsorted
+        if (destFolders.length === 0) {
+          destFolders.push(`${libraryPath}/_Unsorted`)
+        }
       }
     }
 
@@ -205,9 +238,14 @@ export class ZoteroSync {
       const destPath = normalizePath(`${folder}/${newFilename}`)
       destPaths.push(destPath)
 
-      // Check if already exists with same size (skip if so)
+      // Check if already exists (skip if so). In citekey mode the target
+      // folder is hand-curated, so an existing file at this path is always
+      // treated as authoritative and never overwritten, even if size differs.
       const existingFile = this.app.vault.getAbstractFileByPath(destPath)
       if (existingFile) {
+        if (forcedDestFolders) {
+          continue
+        }
         const existingStat = await this.app.vault.adapter.stat(destPath)
         if (existingStat && existingStat.size === sourceStats.size) {
           continue // Already synced
