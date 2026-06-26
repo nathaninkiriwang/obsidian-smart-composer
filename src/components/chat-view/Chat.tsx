@@ -16,6 +16,7 @@ import { ApplyViewState } from '../../ApplyView'
 import { APPLY_VIEW_TYPE } from '../../constants'
 import { useApp } from '../../contexts/app-context'
 import { useMcp } from '../../contexts/mcp-context'
+import { usePlugin } from '../../contexts/plugin-context'
 import { useRAG } from '../../contexts/rag-context'
 import { useSettings } from '../../contexts/settings-context'
 import {
@@ -27,8 +28,8 @@ import { getChatModelClient } from '../../core/llm/manager'
 import { PdfAnalyzer } from '../../core/pdf/pdfAnalyzer'
 import { PdfExtractor } from '../../core/pdf/pdfExtractor'
 import { PdfToolProvider } from '../../core/pdf/pdfToolProvider'
-import { usePlugin } from '../../contexts/plugin-context'
 import { useChatHistory } from '../../hooks/useChatHistory'
+import { SmartComposerSettings } from '../../settings/schema/setting.types'
 import {
   AssistantToolMessageGroup,
   ChatMessage,
@@ -51,6 +52,7 @@ import {
 import { groupAssistantAndToolMessages } from '../../utils/chat/message-groups'
 import { PromptGenerator } from '../../utils/chat/promptGenerator'
 import { readTFileContent } from '../../utils/obsidian'
+import { getMarkdownCounterpart } from '../../utils/zotero'
 import { ErrorModal } from '../modals/ErrorModal'
 import { TemplateSectionModal } from '../modals/TemplateSectionModal'
 
@@ -63,14 +65,32 @@ import { useAutoScroll } from './useAutoScroll'
 import { useChatStreamManager } from './useChatStreamManager'
 import UserMessageItem from './UserMessageItem'
 
-// Add an empty line here
-const getNewInputMessage = (): ChatUserMessage => {
+const getNewInputMessage = (
+  app: App,
+  settings: SmartComposerSettings,
+  // Only auto-attach the current file when starting a new chat. Continuations
+  // omit it to avoid re-sending the whole file on every turn; use @currentfile
+  // to attach it again on demand.
+  attachCurrentFile = true,
+): ChatUserMessage => {
+  const activeFile = app.workspace.getActiveFile()
+  // When viewing a Zotero PDF that has a pre-extracted markdown counterpart,
+  // attach the markdown version instead so the model reads it directly.
+  const currentFile =
+    getMarkdownCounterpart(app, settings, activeFile) ?? activeFile
   return {
     role: 'user',
     content: null,
     promptContent: null,
     id: uuidv4(),
-    mentionables: [],
+    mentionables: attachCurrentFile
+      ? [
+          {
+            type: 'current-file',
+            file: currentFile,
+          },
+        ]
+      : [],
   }
 }
 
@@ -122,7 +142,7 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
   }, [promptGenerator, settings, setSettings, app.vault])
 
   const [inputMessage, setInputMessage] = useState<ChatUserMessage>(() => {
-    const newMessage = getNewInputMessage()
+    const newMessage = getNewInputMessage(app, settings)
     if (props.selectedBlock) {
       newMessage.mentionables = [
         ...newMessage.mentionables,
@@ -151,6 +171,47 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
   const [queryProgress, setQueryProgress] = useState<QueryProgressState>({
     type: 'idle',
   })
+
+  // Keep the current-file chip pointing at the file the user is actually
+  // looking at, but only while composing the first message of a chat (the only
+  // message that auto-attaches it).
+  const isFirstMessageRef = useRef(true)
+  useEffect(() => {
+    isFirstMessageRef.current = chatMessages.length === 0
+  }, [chatMessages.length])
+
+  useEffect(() => {
+    const syncCurrentFile = () => {
+      if (!isFirstMessageRef.current) return
+      const activeFile = app.workspace.getActiveFile()
+      if (!activeFile) return
+      const resolved =
+        getMarkdownCounterpart(app, settings, activeFile) ?? activeFile
+      setInputMessage((prev) => {
+        const hasCurrentFile = prev.mentionables.some(
+          (m) => m.type === 'current-file',
+        )
+        // Don't re-add if the user deleted it, and skip no-op updates.
+        if (!hasCurrentFile) return prev
+        const alreadyResolved = prev.mentionables.some(
+          (m) => m.type === 'current-file' && m.file?.path === resolved.path,
+        )
+        if (alreadyResolved) return prev
+        return {
+          ...prev,
+          mentionables: prev.mentionables.map((m) =>
+            m.type === 'current-file' ? { ...m, file: resolved } : m,
+          ),
+        }
+      })
+    }
+    app.workspace.on('active-leaf-change', syncCurrentFile)
+    app.workspace.on('file-open', syncCurrentFile)
+    return () => {
+      app.workspace.off('active-leaf-change', syncCurrentFile)
+      app.workspace.off('file-open', syncCurrentFile)
+    }
+  }, [app, settings])
 
   const groupedChatMessages: (ChatUserMessage | AssistantToolMessageGroup)[] =
     useMemo(() => {
@@ -190,7 +251,8 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
       }
       setCurrentConversationId(conversationId)
       setChatMessages(conversation)
-      const newInputMessage = getNewInputMessage()
+      // Loading an existing conversation is a continuation — don't auto-attach.
+      const newInputMessage = getNewInputMessage(app, settings, false)
       setInputMessage(newInputMessage)
       setFocusedMessageId(newInputMessage.id)
       setQueryProgress({
@@ -206,7 +268,7 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
     setCurrentConversationId(uuidv4())
     setChatMessages([])
     plugin.paperSelection.clear()
-    const newInputMessage = getNewInputMessage()
+    const newInputMessage = getNewInputMessage(app, settings)
     if (selectedBlock) {
       const mentionableBlock: MentionableBlock = {
         type: 'block',
@@ -787,7 +849,8 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
             inputChatMessages: [...chatMessages, { ...inputMessage, content }],
             useVaultSearch,
           })
-          setInputMessage(getNewInputMessage())
+          // After sending, the next message is a continuation — no auto-attach.
+          setInputMessage(getNewInputMessage(app, settings, false))
         }}
         onFocus={() => {
           setFocusedMessageId(inputMessage.id)
