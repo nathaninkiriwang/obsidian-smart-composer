@@ -8,6 +8,7 @@ import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE, LIBRARY_VIEW_TYPE } from './constants'
 import { getChatModelClient } from './core/llm/manager'
 import { McpManager } from './core/mcp/mcpManager'
 import { PaperSelectionStore } from './core/paper-selection/store'
+import { MarkdownSelectionDetector } from './core/markdown/MarkdownSelectionDetector'
 import { PdfMdToggle } from './core/pdf/PdfMdToggle'
 import { PdfViewDetector } from './core/pdf/PdfViewDetector'
 import { RAGEngine } from './core/rag/ragEngine'
@@ -38,6 +39,7 @@ export default class SmartComposerPlugin extends Plugin {
   paperSelection: PaperSelectionStore = new PaperSelectionStore()
   private pdfViewDetector: PdfViewDetector | null = null
   private pdfMdToggle: PdfMdToggle | null = null
+  private markdownSelectionDetector: MarkdownSelectionDetector | null = null
   private dbManagerInitPromise: Promise<DatabaseManager> | null = null
   private ragEngineInitPromise: Promise<RAGEngine> | null = null
   private timeoutIds: ReturnType<typeof setTimeout>[] = [] // Use ReturnType instead of number
@@ -197,6 +199,11 @@ export default class SmartComposerPlugin extends Plugin {
         (imageDataUrl) => this.convertMathImage(imageDataUrl),
       )
       this.pdfMdToggle = new PdfMdToggle(this.app, () => this.settings)
+      this.markdownSelectionDetector = new MarkdownSelectionDetector(
+        this.app,
+        () => this.settings,
+        (text, sourceName) => void this.addPdfTextToChat(text, sourceName),
+      )
     })
 
     void this.migrateToJsonStorage()
@@ -230,6 +237,10 @@ export default class SmartComposerPlugin extends Plugin {
     // PDF/markdown toggle button cleanup
     this.pdfMdToggle?.destroy()
     this.pdfMdToggle = null
+
+    // Markdown text selection detector cleanup
+    this.markdownSelectionDetector?.destroy()
+    this.markdownSelectionDetector = null
 
     // Zotero cleanup
     this.zoteroSync?.cleanup()
@@ -393,7 +404,7 @@ ${validationResult.error.issues.map((v) => v.message).join('\n')}`)
     return response.choices[0]?.message?.content ?? ''
   }
 
-  async addPdfTextToChat(text: string) {
+  async addPdfTextToChat(text: string, sourceName?: string) {
     // Ensure the chat view is open
     const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)
     if (leaves.length === 0 || !(leaves[0].view instanceof ChatView)) {
@@ -406,7 +417,7 @@ ${validationResult.error.issues.map((v) => v.message).join('\n')}`)
     const chatLeaves = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE)
     if (chatLeaves.length > 0 && chatLeaves[0].view instanceof ChatView) {
       const chatView = chatLeaves[0].view
-      chatView.addPdfTextToChat(text)
+      chatView.addPdfTextToChat(text, sourceName)
       this.app.workspace.revealLeaf(chatLeaves[0])
       chatView.focusMessage()
     }

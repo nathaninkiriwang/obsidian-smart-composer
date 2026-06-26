@@ -27,14 +27,11 @@ import { fileToMentionableImage } from '../../../utils/llm/image'
 import { openMarkdownFile, readTFileContent } from '../../../utils/obsidian'
 import { ObsidianMarkdown } from '../ObsidianMarkdown'
 
-import { ImageUploadButton } from './ImageUploadButton'
 import LexicalContentEditable from './LexicalContentEditable'
 import MentionableBadge from './MentionableBadge'
 import { ModelSelect } from './ModelSelect'
 import { MentionNode } from './plugins/mention/MentionNode'
 import { NodeMutations } from './plugins/on-mutation/OnMutationPlugin'
-import { SubmitButton } from './SubmitButton'
-import { VaultChatButton } from './VaultChatButton'
 
 export type ChatUserInputRef = {
   focus: () => void
@@ -323,13 +320,15 @@ const ChatUserInput = forwardRef<ChatUserInputRef, ChatUserInputProps>(
                 <ModelSelect />
               </div>
               <div className="smtcmp-chat-user-input-controls__buttons">
-                <ImageUploadButton onUpload={handleUploadImages} />
-                <SubmitButton onClick={() => handleSubmit()} />
-                <VaultChatButton
+                <div
+                  className="smtcmp-chat-user-input-clear-button"
                   onClick={() => {
-                    handleSubmit({ useVaultSearch: true })
+                    setMentionables([])
+                    plugin.paperSelection.clear()
                   }}
-                />
+                >
+                  Clear
+                </div>
               </div>
             </div>
           )}

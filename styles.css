@@ -294,6 +294,18 @@
   }
 }
 
+.smtcmp-chat-user-input-clear-button {
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  padding: 0 var(--size-2-1);
+  cursor: pointer;
+  transition: color 0.1s ease-in-out;
+
+  &:hover {
+    color: var(--text-normal);
+  }
+}
+
 .smtcmp-chat-user-input-controls .smtcmp-chat-user-input-submit-button {
   display: flex;
   align-items: center;

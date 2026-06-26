@@ -343,7 +343,7 @@ function PdfTextBadge({
             className="smtcmp-chat-user-input-file-badge-name-icon"
           />
         )}
-        <span>PDF Text</span>
+        <span>{mentionable.sourceName}</span>
       </div>
       <div className="smtcmp-chat-user-input-file-badge-name-suffix">
         {` (${preview})`}

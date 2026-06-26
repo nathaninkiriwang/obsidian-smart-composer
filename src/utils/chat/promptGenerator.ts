@@ -437,8 +437,8 @@ ${similaritySearchResults
         (m): m is MentionablePdfText => m.type === 'pdf-text',
       )
       const pdfTextPrompt = pdfTexts
-        .map(({ content }) => {
-          return `[PDF text selection]:\n${content}\n`
+        .map(({ content, sourceName }) => {
+          return `[${sourceName}]:\n${content}\n`
         })
         .join('')
 

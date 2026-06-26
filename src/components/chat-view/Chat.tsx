@@ -78,7 +78,7 @@ export type ChatRef = {
   openNewChat: (selectedBlock?: MentionableBlockData) => void
   addSelectionToChat: (selectedBlock: MentionableBlockData) => void
   addImageToChat: (image: MentionableImage) => void
-  addPdfTextToChat: (text: string) => void
+  addPdfTextToChat: (text: string, sourceName?: string) => void
   focusMessage: () => void
 }
 
@@ -612,11 +612,11 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
         }
       })
     },
-    addPdfTextToChat: (text: string) => {
+    addPdfTextToChat: (text: string, sourceName = 'PDF Selection') => {
       const pdfText: MentionablePdfText = {
         type: 'pdf-text',
         content: text,
-        sourceName: 'PDF Selection',
+        sourceName,
       }
       setInputMessage((prev) => ({
         ...prev,

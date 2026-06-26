@@ -127,8 +127,8 @@ export class ChatView extends ItemView {
     this.chatRef.current?.addImageToChat(image)
   }
 
-  addPdfTextToChat(text: string) {
-    this.chatRef.current?.addPdfTextToChat(text)
+  addPdfTextToChat(text: string, sourceName?: string) {
+    this.chatRef.current?.addPdfTextToChat(text, sourceName)
   }
 
   focusMessage() {
