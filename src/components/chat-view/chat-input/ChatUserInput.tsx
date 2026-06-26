@@ -12,6 +12,7 @@ import {
 
 import { useApp } from '../../../contexts/app-context'
 import { usePlugin } from '../../../contexts/plugin-context'
+import { useSettings } from '../../../contexts/settings-context'
 import {
   Mentionable,
   MentionableImage,
@@ -25,6 +26,7 @@ import {
 } from '../../../utils/chat/mentionable'
 import { fileToMentionableImage } from '../../../utils/llm/image'
 import { openMarkdownFile, readTFileContent } from '../../../utils/obsidian'
+import { getMarkdownCounterpart } from '../../../utils/zotero'
 import { ObsidianMarkdown } from '../ObsidianMarkdown'
 
 import LexicalContentEditable from './LexicalContentEditable'
@@ -346,6 +348,7 @@ function MentionableContentPreview({
   mentionables: Mentionable[]
 }) {
   const app = useApp()
+  const { settings } = useSettings()
 
   const displayedMentionable: Mentionable | null = useMemo(() => {
     return (
@@ -360,7 +363,7 @@ function MentionableContentPreview({
   const { data: displayFileContent } = useQuery({
     enabled:
       !!displayedMentionable &&
-      ['file', 'current-file', 'block', 'pdf-text'].includes(
+      ['file', 'current-file', 'block', 'pdf-text', 'pdf'].includes(
         displayedMentionable.type,
       ),
     queryKey: [
@@ -391,6 +394,16 @@ function MentionableContentPreview({
           .join('\n')
       } else if (displayedMentionable.type === 'pdf-text') {
         return displayedMentionable.content
+      } else if (displayedMentionable.type === 'pdf') {
+        // Preview the markdown counterpart — the same content the model reads
+        // for a paper (see PromptGenerator's markdown-backed PDF handling).
+        const mdFile = getMarkdownCounterpart(
+          app,
+          settings,
+          displayedMentionable.file,
+        )
+        if (!mdFile) return null
+        return await readTFileContent(mdFile, app.vault)
       }
 
       return null
