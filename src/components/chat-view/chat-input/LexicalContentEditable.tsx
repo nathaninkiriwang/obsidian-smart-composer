@@ -14,12 +14,14 @@ import { RefObject, useCallback, useEffect } from 'react'
 
 import { useApp } from '../../../contexts/app-context'
 import { usePlugin } from '../../../contexts/plugin-context'
+import { useSettings } from '../../../contexts/settings-context'
 import { MentionableImage } from '../../../types/mentionable'
 import {
   SearchableMentionable,
   fuzzySearch,
   fuzzySearchPdfs,
 } from '../../../utils/fuzzy-search'
+import { getMarkdownCounterpart } from '../../../utils/zotero'
 
 import DragDropPaste from './plugins/image/DragDropPastePlugin'
 import ImagePastePlugin from './plugins/image/ImagePastePlugin'
@@ -68,6 +70,7 @@ export default function LexicalContentEditable({
 }: LexicalContentEditableProps) {
   const app = useApp()
   const plugin = usePlugin()
+  const { settings } = useSettings()
 
   const initialConfig: InitialConfigType = {
     namespace: 'LexicalContentEditable',
@@ -84,14 +87,32 @@ export default function LexicalContentEditable({
 
   const searchResultByQuery = useCallback(
     (query: string): SearchableMentionable[] => {
+      // @currentfile: attach the file you're viewing. Resolve to the markdown
+      // version (the file itself if md, or its md counterpart if a Zotero PDF).
+      const currentFileResults: SearchableMentionable[] = []
+      const normalizedQuery = query.toLowerCase().replace(/\s/g, '')
+      if ('currentfile'.startsWith(normalizedQuery)) {
+        const activeFile = app.workspace.getActiveFile()
+        if (activeFile) {
+          currentFileResults.push({
+            type: 'current-file',
+            file:
+              getMarkdownCounterpart(app, settings, activeFile) ?? activeFile,
+          })
+        }
+      }
+
       // When Zotero papers are available, show only PDF results
       const availablePapers = plugin.paperSelection.getAvailablePapers()
       if (availablePapers.length > 0) {
-        return fuzzySearchPdfs(availablePapers, query, app)
+        return [
+          ...currentFileResults,
+          ...fuzzySearchPdfs(availablePapers, query, app),
+        ]
       }
-      return fuzzySearch(app, query)
+      return [...currentFileResults, ...fuzzySearch(app, query)]
     },
-    [app, plugin.paperSelection],
+    [app, settings, plugin.paperSelection],
   )
 
   /*

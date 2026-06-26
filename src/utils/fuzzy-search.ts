@@ -2,6 +2,7 @@ import fuzzysort from 'fuzzysort'
 import { App, TFile, TFolder } from 'obsidian'
 
 import {
+  MentionableCurrentFile,
   MentionableFile,
   MentionableFolder,
   MentionablePdf,
@@ -16,6 +17,7 @@ export type SearchableMentionable =
   | MentionableFolder
   | MentionableVault
   | MentionablePdf
+  | MentionableCurrentFile
 
 type VaultSearchItem = {
   type: 'vault'
@@ -236,7 +238,7 @@ export function fuzzySearchPdfs(
     const file = resolveFile(item.paper.pdfPath)
     if (!file) return null
     const firstAuthor = item.paper.authors[0]
-      ? item.paper.authors[0].split(',')[0].split(' ').pop() ?? ''
+      ? (item.paper.authors[0].split(',')[0].split(' ').pop() ?? '')
       : ''
     return {
       type: 'pdf',

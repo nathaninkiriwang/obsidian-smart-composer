@@ -129,6 +129,13 @@ class MentionTypeaheadOption extends MenuOption {
         this.name = result.title
         this.mentionable = result
         break
+      case 'current-file':
+        super('current-file')
+        this.name = result.file
+          ? `Current file (${result.file.name})`
+          : 'Current file'
+        this.mentionable = result
+        break
     }
   }
 }
