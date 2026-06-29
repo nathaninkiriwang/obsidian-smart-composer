@@ -6,10 +6,12 @@ import { ChatProps } from './components/chat-view/Chat'
 import { InstallerUpdateRequiredModal } from './components/modals/InstallerUpdateRequiredModal'
 import { APPLY_VIEW_TYPE, CHAT_VIEW_TYPE, LIBRARY_VIEW_TYPE } from './constants'
 import { getChatModelClient } from './core/llm/manager'
+import { MarkdownSelectionDetector } from './core/markdown/MarkdownSelectionDetector'
 import { McpManager } from './core/mcp/mcpManager'
 import { PaperSelectionStore } from './core/paper-selection/store'
-import { MarkdownSelectionDetector } from './core/markdown/MarkdownSelectionDetector'
+import { PdfHighlighter } from './core/pdf/PdfHighlighter'
 import { PdfMdToggle } from './core/pdf/PdfMdToggle'
+import { PDF_MODE_META, PDF_MODE_ORDER } from './core/pdf/PdfMode'
 import { PdfViewDetector } from './core/pdf/PdfViewDetector'
 import { RAGEngine } from './core/rag/ragEngine'
 import { ZoteroClient } from './core/zotero/zoteroClient'
@@ -38,6 +40,7 @@ export default class SmartComposerPlugin extends Plugin {
   zoteroSync: ZoteroSync | null = null
   paperSelection: PaperSelectionStore = new PaperSelectionStore()
   private pdfViewDetector: PdfViewDetector | null = null
+  private pdfHighlighter: PdfHighlighter | null = null
   private pdfMdToggle: PdfMdToggle | null = null
   private markdownSelectionDetector: MarkdownSelectionDetector | null = null
   private dbManagerInitPromise: Promise<DatabaseManager> | null = null
@@ -77,6 +80,33 @@ export default class SmartComposerPlugin extends Plugin {
       name: 'Add selection to chat',
       editorCallback: (editor: Editor, view: MarkdownView) => {
         this.addSelectionToChat(editor, view)
+      },
+    })
+
+    // PDF interaction mode commands (active only in a PDF view). Bind your own
+    // hotkeys in Settings → Hotkeys; no defaults so Ctrl+S stays free.
+    for (const mode of PDF_MODE_ORDER) {
+      const meta = PDF_MODE_META[mode]
+      this.addCommand({
+        id: `pdf-mode-${meta.commandId}`,
+        name: `PDF: ${meta.label} mode`,
+        checkCallback: (checking: boolean) => {
+          if (!this.pdfViewDetector?.hasActivePdfOverlay()) return false
+          if (!checking) this.pdfViewDetector.setActiveMode(mode)
+          return true
+        },
+      })
+    }
+    this.addCommand({
+      id: 'pdf-mode-cycle',
+      name: 'PDF: Cycle interaction mode',
+      // No default hotkey here — Ctrl+S is handled by PdfViewDetector's own
+      // capture-phase listener so it doesn't claim the key globally and
+      // clobber the markdown selection toggle (which also uses Ctrl+S).
+      checkCallback: (checking: boolean) => {
+        if (!this.pdfViewDetector?.hasActivePdfOverlay()) return false
+        if (!checking) this.pdfViewDetector.cycleActiveMode()
+        return true
       },
     })
 
@@ -190,13 +220,19 @@ export default class SmartComposerPlugin extends Plugin {
     // This adds a settings tab so the user can configure various aspects of the plugin
     this.addSettingTab(new SmartComposerSettingTab(this.app, this))
 
-    // Initialize PDF region capture overlay
+    // Initialize PDF interaction modes (toolbar + overlay) and highlighter
     this.app.workspace.onLayoutReady(() => {
+      this.pdfHighlighter = new PdfHighlighter(this.app, () => this.settings)
       this.pdfViewDetector = new PdfViewDetector(
         this.app.workspace,
-        (image) => this.captureRegionToChat(image),
-        (text) => this.addPdfTextToChat(text),
-        (imageDataUrl) => this.convertMathImage(imageDataUrl),
+        {
+          onCapture: (image) => this.captureRegionToChat(image),
+          onTextSelection: (text) => this.addPdfTextToChat(text),
+          onMathConversion: (imageDataUrl) =>
+            this.convertMathImage(imageDataUrl),
+        },
+        this.pdfHighlighter,
+        () => this.settings.zotero.defaultPdfMode,
       )
       this.pdfMdToggle = new PdfMdToggle(this.app, () => this.settings)
       this.markdownSelectionDetector = new MarkdownSelectionDetector(
@@ -233,6 +269,7 @@ export default class SmartComposerPlugin extends Plugin {
     // PDF overlay cleanup
     this.pdfViewDetector?.destroy()
     this.pdfViewDetector = null
+    this.pdfHighlighter = null
 
     // PDF/markdown toggle button cleanup
     this.pdfMdToggle?.destroy()

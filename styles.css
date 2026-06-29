@@ -2973,20 +2973,30 @@ button.smtcmp-chat-input-model-select {
 /* PDF region capture */
 
 /* Default: screenshot mode — crosshair everywhere */
-.smtcmp-pdf-capture-active {
+/* Read mode — scroll only; the text layer is inert. */
+.smtcmp-pdf-mode-read .textLayer {
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Screenshot mode — crosshair drag-to-capture; text layer non-interactive. */
+.smtcmp-pdf-mode-screenshot {
   cursor: crosshair;
 }
 
-.smtcmp-pdf-capture-active .textLayer {
+.smtcmp-pdf-mode-screenshot .textLayer {
   pointer-events: none;
+  user-select: none;
 }
 
-/* Text select mode — text cursor, text layer is interactive */
-.smtcmp-pdf-capture-active.smtcmp-pdf-text-mode {
+/* Highlight & Text modes — native text selection stays active. */
+.smtcmp-pdf-mode-text,
+.smtcmp-pdf-mode-highlight {
   cursor: text;
 }
 
-.smtcmp-pdf-capture-active.smtcmp-pdf-text-mode .textLayer {
+.smtcmp-pdf-mode-text .textLayer,
+.smtcmp-pdf-mode-highlight .textLayer {
   pointer-events: auto;
 }
 
@@ -3020,6 +3030,7 @@ button.smtcmp-chat-input-model-select {
   50% { opacity: 0.5; }
 }
 
+/* Floating badge used by the markdown text-select toggle (unchanged). */
 .smtcmp-pdf-mode-badge {
   position: sticky;
   top: 4px;
@@ -3033,6 +3044,165 @@ button.smtcmp-chat-input-model-select {
   font-size: 11px;
   pointer-events: none;
   opacity: 0.8;
+}
+
+/* === PDF toolbar controls: mode switcher + annotation toggle === */
+.smtcmp-pdf-toolbar-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+/* When the controls sit next to PDF++'s color palette, separate them with a
+   hairline so the whole bar reads as one family of controls. */
+.pdf-plus-color-palette + .smtcmp-pdf-toolbar-controls {
+  position: relative;
+  margin-left: 13px;
+}
+
+.pdf-plus-color-palette + .smtcmp-pdf-toolbar-controls::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 16px;
+  background: var(--background-modifier-border);
+}
+
+.smtcmp-pdf-mode-switcher,
+.smtcmp-pdf-annotation-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-form-field, var(--background-secondary));
+  box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+}
+
+.smtcmp-pdf-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border-radius: calc(var(--radius-s) - 2px);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.smtcmp-pdf-mode-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.smtcmp-pdf-mode-btn.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.smtcmp-pdf-mode-btn.is-active:hover {
+  background: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
+}
+
+.smtcmp-pdf-mode-btn:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.smtcmp-pdf-mode-btn .svg-icon {
+  width: 16px;
+  height: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smtcmp-pdf-mode-btn {
+    transition: none;
+  }
+}
+
+/* === Trim PDF++'s palette to colors only (Smart Composer handles the rest) ===
+   Hide PDF++'s toolbar action controls (copy-format / display dropdowns,
+   write-file & crop buttons, status) so only the color swatches remain. */
+.pdf-plus-color-palette > *:not(.pdf-plus-color-palette-item) {
+  display: none !important;
+}
+
+/* Keep only the yellow and red highlight colors. */
+.pdf-plus-color-palette-item:not([data-highlight-color='yellow']):not(
+    [data-highlight-color='red']
+  ) {
+  display: none !important;
+}
+
+/* === Existing highlights become interactive in highlight mode === */
+.smtcmp-pdf-mode-highlight .pdf-plus-backlink-selection {
+  cursor: pointer;
+  transition: filter 120ms ease, outline-color 120ms ease;
+}
+
+/* All rects of a hovered highlight light up together (applied via JS so a
+   multi-line quote reads as a single group, not separate lines). */
+.smtcmp-pdf-mode-highlight .pdf-plus-backlink-selection.smtcmp-hl-group-hover {
+  filter: brightness(0.92) saturate(1.15);
+  outline: 1.5px solid var(--background-modifier-border-hover, var(--text-faint));
+  outline-offset: 0;
+  border-radius: 1px;
+}
+
+/* Floating delete affordance shown on hover over a highlight. */
+.smtcmp-pdf-highlight-delete {
+  position: fixed;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.25),
+    inset 0 0 0 1px var(--background-modifier-border);
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 120ms ease, transform 120ms ease, color 120ms ease,
+    background-color 120ms ease;
+  pointer-events: none;
+}
+
+.smtcmp-pdf-highlight-delete.is-visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.smtcmp-pdf-highlight-delete:hover {
+  color: var(--text-on-accent);
+  background: var(--color-red, #ea5252);
+}
+
+.smtcmp-pdf-highlight-delete .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smtcmp-pdf-highlight-delete {
+    transition: opacity 120ms ease;
+    transform: none;
+  }
+  .smtcmp-pdf-highlight-delete.is-visible {
+    transform: none;
+  }
 }
 
 .smtcmp-pdf-md-toggle {

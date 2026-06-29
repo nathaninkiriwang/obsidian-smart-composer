@@ -51,6 +51,10 @@ describe('parseSmartComposerSettings', () => {
         libraryVaultPath: 'Library',
         selectedCollection: '',
         pdfExtractionModelId: '',
+        pdfNamingScheme: 'author-year',
+        markdownVaultPath: '',
+        annotationsVaultPath: 'annotations',
+        defaultPdfMode: 'read',
       },
     })
   })

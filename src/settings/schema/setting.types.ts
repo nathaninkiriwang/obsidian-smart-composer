@@ -106,6 +106,14 @@ export const smartComposerSettingsSchema = z.object({
       // pre-extracted markdown at `${markdownVaultPath}/<citekey>/<citekey>.md`
       // instead of using PDF tool-calling extraction. Empty disables this.
       markdownVaultPath: z.string().catch(''),
+      // Folder where Highlight mode writes per-paper annotation files
+      // (`<annotationsVaultPath>/<citekey>.md`). PDF++ renders the highlights
+      // from these backlinks; the PDF itself is never modified.
+      annotationsVaultPath: z.string().catch('annotations'),
+      // Which interaction mode a PDF view opens in.
+      defaultPdfMode: z
+        .enum(['read', 'highlight', 'screenshot', 'text'])
+        .catch('read'),
     })
     .catch({
       apiBaseUrl: ZOTERO_DEFAULT_API_BASE_URL,
@@ -115,6 +123,8 @@ export const smartComposerSettingsSchema = z.object({
       pdfExtractionModelId: '',
       pdfNamingScheme: 'author-year',
       markdownVaultPath: '',
+      annotationsVaultPath: 'annotations',
+      defaultPdfMode: 'read',
     }),
 })
 export type SmartComposerSettings = z.infer<typeof smartComposerSettingsSchema>
