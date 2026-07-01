@@ -18,9 +18,20 @@ export function CollectionSelector({
   const { settings } = useSettings()
   const [isOpen, setIsOpen] = useState(false)
   const [tree, setTree] = useState<CollectionTreeNode[]>([])
+  const [refreshTick, setRefreshTick] = useState(0)
 
   const libraryPath = settings.zotero.libraryVaultPath || 'Library'
 
+  // Auto-refresh the collection tree from Zotero every 5 minutes so newly
+  // added/renamed/removed collections (and their item counts) appear without
+  // reopening the pane or reloading Obsidian.
+  useEffect(() => {
+    const id = setInterval(() => setRefreshTick((t) => t + 1), 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Re-fetch on mount, on each 5-min tick, and every time the dropdown opens
+  // so the folder tree always reflects the current Zotero state.
   useEffect(() => {
     const client = plugin.zoteroClient
     if (!client) return
@@ -42,7 +53,7 @@ export function CollectionSelector({
     return () => {
       cancelled = true
     }
-  }, [plugin.zoteroClient, libraryPath])
+  }, [plugin.zoteroClient, libraryPath, refreshTick, isOpen])
 
   const handleSelect = useCallback(
     (key: string) => {

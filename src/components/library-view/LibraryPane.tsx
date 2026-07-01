@@ -151,6 +151,16 @@ export function LibraryPane() {
     void fetchPapers()
   }, [fetchPapers, refreshKey])
 
+  // Auto-refresh from Zotero every 5 minutes so the paper list stays current
+  // even without vault file changes or manual interaction. Refetch silently
+  // (no loading spinner) to avoid flicker on each tick.
+  useEffect(() => {
+    const id = setInterval(() => {
+      void fetchPapers()
+    }, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [fetchPapers])
+
   // Reactive vault event listeners — re-fetch when files change in Library
   useEffect(() => {
     const debounceMs = 500
