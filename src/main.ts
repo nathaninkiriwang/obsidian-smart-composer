@@ -210,7 +210,6 @@ export default class SmartComposerPlugin extends Plugin {
         this.settings,
         this.zoteroClient,
       )
-      this.zoteroSync.startWatcher()
 
       this.addSettingsChangeListener((newSettings) => {
         this.zoteroSync?.updateSettings(newSettings)
@@ -280,7 +279,6 @@ export default class SmartComposerPlugin extends Plugin {
     this.markdownSelectionDetector = null
 
     // Zotero cleanup
-    this.zoteroSync?.cleanup()
     this.zoteroSync = null
     this.zoteroClient = null
   }

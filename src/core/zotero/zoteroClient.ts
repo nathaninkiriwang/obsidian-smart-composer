@@ -32,6 +32,47 @@ async function httpGetJson(url: string): Promise<{ status: number; json: unknown
   return { status: res.status, json: JSON.parse(res.body) }
 }
 
+/** Make an HTTP POST request with a JSON body using Node's http module. */
+function httpPostJson(
+  url: string,
+  body: unknown,
+): Promise<{ status: number; json: unknown }> {
+  return new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(body), 'utf-8')
+    const u = new URL(url)
+    const req = http.request(
+      {
+        hostname: u.hostname,
+        port: u.port,
+        path: u.pathname + u.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'Content-Length': data.length,
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (chunk: Buffer) => chunks.push(chunk))
+        res.on('end', () => {
+          try {
+            resolve({
+              status: res.statusCode ?? 0,
+              json: JSON.parse(Buffer.concat(chunks).toString('utf-8')),
+            })
+          } catch (e) {
+            reject(e)
+          }
+        })
+      },
+    )
+    req.on('error', reject)
+    req.write(data)
+    req.end()
+  })
+}
+
 export function getAuthorLastNames(creators: ZoteroCreator[]): string[] {
   return creators
     .filter((c) => c.creatorType === 'author')
@@ -95,22 +136,6 @@ export function buildCollectionTree(
   return roots
     .sort((a, b) => a.data.name.localeCompare(b.data.name))
     .map((r) => buildNode(r, rootPath))
-}
-
-export function flattenCollectionTree(
-  nodes: CollectionTreeNode[],
-): CollectionTreeNode[] {
-  const result: CollectionTreeNode[] = []
-  function walk(node: CollectionTreeNode) {
-    result.push(node)
-    for (const child of node.children) {
-      walk(child)
-    }
-  }
-  for (const n of nodes) {
-    walk(n)
-  }
-  return result
 }
 
 export class ZoteroClient {
@@ -301,25 +326,34 @@ export class ZoteroClient {
     return response.json as ZoteroAttachment[]
   }
 
-  async getItemBibtex(itemKey: string): Promise<string> {
-    const response = await httpGet(
-      `${this.baseUrl}/api/users/0/items/${itemKey}?format=bibtex`,
-    )
-    if (response.status !== 200) {
-      throw new Error(`Zotero API error: ${response.status}`)
+  /**
+   * Resolve Better BibTeX citekeys for many items in a single JSON-RPC call
+   * (chunked for very large libraries). Returns an itemKey → citekey map;
+   * items without a resolvable citekey are omitted. Replaces the previous
+   * one-bibtex-request-per-item approach.
+   */
+  async fetchCitekeys(itemKeys: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>()
+    const CHUNK = 250
+    for (let i = 0; i < itemKeys.length; i += CHUNK) {
+      const chunk = itemKeys.slice(i, i + CHUNK)
+      try {
+        const res = await httpPostJson(
+          `${this.baseUrl}/better-bibtex/json-rpc`,
+          { jsonrpc: '2.0', method: 'item.citationkey', params: [chunk], id: 1 },
+        )
+        const result = (res.json as { result?: Record<string, string> })?.result
+        if (result) {
+          for (const [itemKey, citekey] of Object.entries(result)) {
+            if (citekey) map.set(itemKey, citekey)
+          }
+        }
+      } catch {
+        // Better BibTeX unavailable for this chunk — those items fall back to
+        // author-year naming.
+      }
     }
-    return response.body
-  }
-
-  /** Returns the Better BibTeX citekey for an item, or null if unavailable. */
-  async getCitekey(itemKey: string): Promise<string | null> {
-    try {
-      const bibtex = await this.getItemBibtex(itemKey)
-      const match = bibtex.match(/@\w+\{([^,]+),/)
-      return match ? match[1] : null
-    } catch {
-      return null
-    }
+    return map
   }
 
   buildPaperMetadata(

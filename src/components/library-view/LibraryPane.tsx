@@ -75,17 +75,15 @@ export function LibraryPane() {
         await client.fetchItemsWithAttachments(collectionKey)
       const fileIndex = buildFileIndex()
 
-      // Build filename map (fallback for before first background sync).
-      // In citekey mode this is resolved directly here rather than waiting
-      // on the background sync's 30s poll, since the PDFs are typically
-      // already present (placed there independently, e.g. via ZotMoov).
+      // Resolve the target filename for each item. In citekey mode the
+      // citekeys come from one batched Better BibTeX call; items without a
+      // citekey fall back to author-year naming.
       const filenameMap =
         settings.zotero.pdfNamingScheme === 'citekey'
-          ? await buildCitekeyFilenameMap(items, (key) => client.getCitekey(key))
+          ? await buildCitekeyFilenameMap(items, (keys) =>
+              client.fetchCitekeys(keys),
+            )
           : buildFilenameMap(items)
-
-      // Get synced paths from latest sync (primary lookup)
-      const syncedPaths = plugin.zoteroSync?.getSyncedPaths()
 
       const paperList: PaperMetadata[] = []
       for (const item of items) {
@@ -95,30 +93,13 @@ export function LibraryPane() {
           continue
         }
 
-        // Multi-layer file lookup:
-        // 1. Synced paths from latest sync (exact, handles collisions correctly)
+        // Resolve the PDF's vault path by matching the resolved filename (or
+        // the original Zotero filename) against the Library folder index.
         let vaultPath = ''
-        const syncedItemPaths = syncedPaths?.get(item.key)
-        if (syncedItemPaths && syncedItemPaths.length > 0) {
-          // Prefer a path that still exists in the vault
-          for (const p of syncedItemPaths) {
-            if (fileIndex.has(p.split('/').pop() ?? '')) {
-              vaultPath = p
-              break
-            }
-          }
-          if (!vaultPath) vaultPath = syncedItemPaths[0]
+        const renamedFilename = filenameMap.get(item.key)
+        if (renamedFilename) {
+          vaultPath = fileIndex.get(renamedFilename) ?? ''
         }
-
-        // 2. Collision-handled filename map (fallback)
-        if (!vaultPath) {
-          const renamedFilename = filenameMap.get(item.key)
-          if (renamedFilename) {
-            vaultPath = fileIndex.get(renamedFilename) ?? ''
-          }
-        }
-
-        // 3. Original Zotero filename (last resort, e.g. external sync)
         if (!vaultPath && attachment.data.filename) {
           vaultPath = fileIndex.get(attachment.data.filename) ?? ''
         }
@@ -139,7 +120,6 @@ export function LibraryPane() {
     }
   }, [
     plugin.zoteroClient,
-    plugin.zoteroSync,
     selectedCollection,
     buildFileIndex,
     settings.zotero.pdfNamingScheme,
