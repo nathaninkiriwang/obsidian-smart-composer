@@ -176,10 +176,11 @@ export class ZoteroSync {
     // device). If it's already there, recognize it immediately rather than
     // trying to resolve/copy it from Zotero's internal storage.
     if (forcedDestFolders) {
+      // Recognition-only: the target folder is managed externally (ZotMoov).
+      // Never read from Zotero's internal storage or write into this folder —
+      // just report whether the citekey PDF is already present.
       const destPath = normalizePath(`${forcedDestFolders[0]}/${newFilename}`)
-      if (this.app.vault.getAbstractFileByPath(destPath)) {
-        return [destPath]
-      }
+      return this.app.vault.getAbstractFileByPath(destPath) ? [destPath] : []
     }
 
     // Find PDF attachment
@@ -319,6 +320,14 @@ export class ZoteroSync {
 
   startWatcher(): void {
     if (!Platform.isDesktop) return
+
+    // In citekey mode the PDFs are placed and kept up to date externally
+    // (ZotMoov → raw/pdfs/<citekey>.pdf), so there is nothing for the plugin
+    // to copy or clean up. Skip the file watcher and the 30s polling sync
+    // entirely — they would otherwise re-fetch every item + one bibtex request
+    // per item every 30 seconds for a result nothing consumes. The library
+    // pane resolves PDFs by scanning the vault and refreshes on its own timer.
+    if (this.settings.zotero.pdfNamingScheme === 'citekey') return
 
     const storagePath = this.getZoteroStoragePath()
     if (!fs.existsSync(storagePath)) {
