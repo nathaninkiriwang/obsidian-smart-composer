@@ -66,13 +66,13 @@ export class PdfMdToggle {
       const viewType = view.getViewType()
 
       if (viewType === 'pdf' && file.parent?.path === pdfFolder) {
-        this.injectPdfToggle(leaf, view, file, mdFolder)
+        this.injectPdfToggle(leaf, view, mdFolder)
       } else if (
         viewType === 'markdown' &&
         file.extension === 'md' &&
         file.parent?.path === `${mdFolder}/${file.basename}`
       ) {
-        this.injectMarkdownToggle(leaf, view, file, pdfFolder)
+        this.injectMarkdownToggle(leaf, view, pdfFolder)
       }
     })
   }
@@ -80,7 +80,6 @@ export class PdfMdToggle {
   private injectPdfToggle(
     leaf: WorkspaceLeaf,
     view: FileView,
-    file: TFile,
     mdFolder: string,
   ) {
     const toolbarRight = view.containerEl.querySelector('.pdf-toolbar-right')
@@ -95,7 +94,13 @@ export class PdfMdToggle {
 
     btn.addEventListener('click', (evt) => {
       evt.preventDefault()
-      const citekey = file.basename
+      // Resolve the citekey from the leaf's CURRENT file at click time, not a
+      // file captured when the button was injected. Obsidian reuses the same
+      // PDF leaf/toolbar (and this button) when a new paper opens in the pane,
+      // so a captured file would go stale and open the previous paper's md.
+      const current = leaf.view instanceof FileView ? leaf.view.file : null
+      if (!current) return
+      const citekey = current.basename
       const mdPath = `${mdFolder}/${citekey}/${citekey}.md`
       const mdFile = this.app.vault.getAbstractFileByPath(mdPath)
       if (mdFile instanceof TFile) {
@@ -107,14 +112,17 @@ export class PdfMdToggle {
   private injectMarkdownToggle(
     leaf: WorkspaceLeaf,
     view: FileView,
-    file: TFile,
     pdfFolder: string,
   ) {
     const actionsEl = view.containerEl.querySelector('.view-actions')
     if (actionsEl?.querySelector(`.${TOGGLE_CLASS}`)) return
 
     const btn = view.addAction('file-text', 'Switch to PDF version', () => {
-      const citekey = file.basename
+      // Resolve from the leaf's CURRENT file at click time (see injectPdfToggle):
+      // the markdown leaf is reused across papers, so a captured file goes stale.
+      const current = leaf.view instanceof FileView ? leaf.view.file : null
+      if (!current) return
+      const citekey = current.basename
       const pdfPath = `${pdfFolder}/${citekey}.pdf`
       const pdfFile = this.app.vault.getAbstractFileByPath(pdfPath)
       if (pdfFile instanceof TFile) {
