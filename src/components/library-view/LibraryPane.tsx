@@ -1,6 +1,7 @@
-import { Notice, TFile, TFolder } from 'obsidian'
+import { Notice, TFile, TFolder, WorkspaceLeaf } from 'obsidian'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { LIBRARY_VIEW_TYPE } from '../../constants'
 import { useApp } from '../../contexts/app-context'
 import { usePlugin } from '../../contexts/plugin-context'
 import { useSettings } from '../../contexts/settings-context'
@@ -131,15 +132,28 @@ export function LibraryPane() {
     void fetchPapers()
   }, [fetchPapers, refreshKey])
 
-  // Auto-refresh from Zotero every 5 minutes so the paper list stays current
-  // even without vault file changes or manual interaction. Refetch silently
-  // (no loading spinner) to avoid flicker on each tick.
+  // Refresh on focus instead of polling on a timer: refetch when Obsidian
+  // regains OS focus or when the Library pane becomes the active leaf, so the
+  // list reflects any Zotero changes made while we were away. Together with the
+  // mount fetch above (which also covers app restart / reopening the pane) and
+  // the vault file events below, this keeps the list current with no interval.
   useEffect(() => {
-    const id = setInterval(() => {
-      void fetchPapers()
-    }, 5 * 60 * 1000)
-    return () => clearInterval(id)
-  }, [fetchPapers])
+    let debounce: ReturnType<typeof setTimeout> | null = null
+    const refresh = () => {
+      if (debounce) clearTimeout(debounce)
+      debounce = setTimeout(() => void fetchPapers(), 150)
+    }
+    const onActiveLeafChange = (leaf: WorkspaceLeaf | null) => {
+      if (leaf?.view.getViewType() === LIBRARY_VIEW_TYPE) refresh()
+    }
+    const leafRef = app.workspace.on('active-leaf-change', onActiveLeafChange)
+    window.addEventListener('focus', refresh)
+    return () => {
+      if (debounce) clearTimeout(debounce)
+      app.workspace.offref(leafRef)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [app.workspace, fetchPapers])
 
   // Reactive vault event listeners — re-fetch when files change in Library
   useEffect(() => {
