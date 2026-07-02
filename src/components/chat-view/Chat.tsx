@@ -191,8 +191,23 @@ const Chat = forwardRef<ChatRef, ChatProps>((props, ref) => {
         const hasCurrentFile = prev.mentionables.some(
           (m) => m.type === 'current-file',
         )
-        // Don't re-add if the user deleted it, and skip no-op updates.
-        if (!hasCurrentFile) return prev
+        if (!hasCurrentFile) {
+          // The current-file chip is gone. Re-attach it only when the input has
+          // been fully cleared — no mentionables and no typed text — i.e. the
+          // user cleared all selections and inputs, so we restore the default
+          // "include the active file" behaviour on the next file change. If they
+          // removed just the chip while keeping other context, leave it out.
+          const isCleared =
+            prev.mentionables.length === 0 &&
+            (!prev.content ||
+              editorStateToPlainText(prev.content).trim() === '')
+          if (!isCleared) return prev
+          return {
+            ...prev,
+            mentionables: [{ type: 'current-file', file: resolved }],
+          }
+        }
+        // Skip no-op updates.
         const alreadyResolved = prev.mentionables.some(
           (m) => m.type === 'current-file' && m.file?.path === resolved.path,
         )
